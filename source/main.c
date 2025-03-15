@@ -18,9 +18,8 @@ int main()
     }
 
     State state = {};
-
-    // For now, create an OpenGL window to avoid loading Vulkan Portability library
-    state.window = SDL_CreateWindow("SippetBox", 640, 480, SDL_WINDOW_OPENGL);
+    
+    state.window = SDL_CreateWindow("SippetBox", 640, 480, SDL_WINDOW_VULKAN);
     if (state.window == NULL)
     {
         SDL_LogError(SDL_LOG_CATEGORY_ERROR, "Could not create window: %s\n", SDL_GetError());
