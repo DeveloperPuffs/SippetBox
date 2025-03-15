@@ -3,6 +3,8 @@
 
 #include <SDL3/SDL.h>
 
+#include <engine/graphics.h>
+
 typedef struct
 {
    SDL_Window *window;
@@ -17,8 +19,15 @@ int main()
         exit(EXIT_FAILURE);
     }
 
-    State state = {};
+    GraphicsBackend *graphics_backend = graphics_backend_create();
+    if (graphics_backend == NULL)
+    {
+        SDL_Quit();
+        exit(EXIT_FAILURE);
+    }
     
+    State state = {};
+
     state.window = SDL_CreateWindow("SippetBox", 640, 480, SDL_WINDOW_VULKAN);
     if (state.window == NULL)
     {
