@@ -21,11 +21,7 @@ typedef struct GraphicsBackend
 GraphicsBackend *graphics_backend_create()
 {
     GraphicsBackend *graphics_backend = (GraphicsBackend *)malloc(sizeof(GraphicsBackend));
-    if (graphics_backend == NULL)
-    {
-        return NULL;
-    }
-
+    if (!graphics_backend) return NULL;
     return graphics_backend;
 }
 

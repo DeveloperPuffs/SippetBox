@@ -8,47 +8,39 @@
 typedef struct
 {
    SDL_Window *window;
+   GraphicsBackend *graphics_backend;
 } State;
 
 static bool update(State *state);
+static void terminate(State *state, int exit_code);
 
 int main()
 {
-    if (SDL_Init(SDL_INIT_VIDEO) == false)
-    {
-        exit(EXIT_FAILURE);
-    }
-
-    GraphicsBackend *graphics_backend = graphics_backend_create();
-    if (graphics_backend == NULL)
-    {
-        SDL_Quit();
-        exit(EXIT_FAILURE);
-    }
-    
     State state = {};
+    state.window = NULL;
+    state.graphics_backend = NULL;
+
+    if (!SDL_Init(SDL_INIT_VIDEO)) terminate(&state, EXIT_FAILURE);
+
+    state.graphics_backend = graphics_backend_create();
+    if (!state.graphics_backend) terminate(&state, EXIT_FAILURE);
 
     state.window = SDL_CreateWindow("SippetBox", 640, 480, SDL_WINDOW_VULKAN);
-    if (state.window == NULL)
+    if (!state.window)
     {
         SDL_LogError(SDL_LOG_CATEGORY_ERROR, "Could not create window: %s\n", SDL_GetError());
-        SDL_Quit();
-        
-        exit(EXIT_FAILURE);
+        terminate(&state, EXIT_FAILURE);
     }
 
     while (true)
     {
-        if (update(&state) == false)
+        if (!update(&state))
         {
             break;
         }
     }
 
-    SDL_DestroyWindow(state.window);
-    SDL_Quit();
-
-    exit(EXIT_SUCCESS);
+    terminate(&state, EXIT_SUCCESS);
 }
 
 static bool update(State *state)
@@ -63,4 +55,20 @@ static bool update(State *state)
     }
 
     return true;
+}
+
+static void terminate(State *state, int exit_code)
+{
+    if (state->graphics_backend)
+    {
+        graphics_backend_destroy(state->graphics_backend);
+    }
+    
+    if (state->window)
+    {
+        SDL_DestroyWindow(state->window);
+    }
+
+    SDL_Quit();
+    exit(exit_code);
 }
