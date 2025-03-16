@@ -24,22 +24,17 @@ int main()
 
     state.graphics_backend = graphics_backend_create();
     if (!state.graphics_backend) terminate(&state, EXIT_FAILURE);
-
+    
     state.window = SDL_CreateWindow("SippetBox", 640, 480, SDL_WINDOW_VULKAN);
     if (!state.window)
     {
-        SDL_LogError(SDL_LOG_CATEGORY_ERROR, "Could not create window: %s\n", SDL_GetError());
+        printf("ERROR: Failed to create window: %s\n", SDL_GetError());
         terminate(&state, EXIT_FAILURE);
     }
 
-    while (true)
-    {
-        if (!update(&state))
-        {
-            break;
-        }
-    }
-
+    // This will keep waiting for the `update()` function to return `false`
+    while (update(&state));
+    
     terminate(&state, EXIT_SUCCESS);
 }
 
@@ -63,7 +58,7 @@ static void terminate(State *state, int exit_code)
     {
         graphics_backend_destroy(state->graphics_backend);
     }
-    
+
     if (state->window)
     {
         SDL_DestroyWindow(state->window);
