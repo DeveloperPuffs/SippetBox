@@ -32,16 +32,24 @@ static inline uint32_t rate_physical_device_memory(VkPhysicalDevice physical_dev
 static inline uint32_t rate_physical_device_queue_families(VkPhysicalDevice physical_device);
 static inline uint32_t rate_physical_device_extensions(VkPhysicalDevice physical_device);
 
+/*********************************************************************************************************************/
+// Graphics Backend Creation Function
+/*********************************************************************************************************************/
+
 GraphicsBackend *graphics_backend_create()
 {
     VkResult result;
-
+    
     GraphicsBackend *graphics_backend = (GraphicsBackend *)calloc(1, sizeof(GraphicsBackend));
     if (graphics_backend == NULL)
     {
-        fprintf(stderr, "ERROR: Failed to allocate memory for graphics backend instance");
+        fprintf(stderr, "ERROR: Failed to allocate memory for graphics backend instance\n");
         return NULL;
     }
+
+    /*****************************************************************************************************************/
+    // Vulkan Instance Creation
+    /*****************************************************************************************************************/
 
     VkInstanceCreateInfo instance_creation_information = {0};
     instance_creation_information.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
@@ -126,7 +134,8 @@ GraphicsBackend *graphics_backend_create()
         return NULL;
     }
 
-    // An array of the required (not SDL) extensions, it should be fine if I just hardcode this for now
+    // VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME - Enabled to be able to run Vulkan on a macOS via MoltenVK
+    // VK_EXT_DEBUG_UTILS_EXTENSION_NAME - Enabled to be able to setup a debug messenger with the instance
     const char *required_extensions[] =
     {
         VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME,
@@ -168,6 +177,10 @@ GraphicsBackend *graphics_backend_create()
         graphics_backend_destroy(graphics_backend);
         return NULL;
     }
+
+    /*****************************************************************************************************************/
+    // Vulkan Debug Messenger Creation
+    /*****************************************************************************************************************/
 
     VkDebugUtilsMessengerCreateInfoEXT debug_messenger_creation_information = {0};
     debug_messenger_creation_information.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
@@ -214,6 +227,10 @@ GraphicsBackend *graphics_backend_create()
         graphics_backend_destroy(graphics_backend);
         return NULL;
     }
+
+    /*****************************************************************************************************************/
+    // Physical Device Selection
+    /*****************************************************************************************************************/
 
     uint32_t physical_device_count;
     result = vkEnumeratePhysicalDevices(graphics_backend->vulkan_instance, &physical_device_count, NULL);
@@ -276,6 +293,10 @@ GraphicsBackend *graphics_backend_create()
     }
 
     fprintf(stdout, "INFORMATION: Selected physical device with score %d\n", best_score);
+    
+    /*****************************************************************************************************************/
+    // Graphics Queue Family Index and Present Queue Family Index Selection
+    /*****************************************************************************************************************/
 
     uint32_t queue_family_count = 0;
     vkGetPhysicalDeviceQueueFamilyProperties(graphics_backend->physical_device, &queue_family_count, NULL);
@@ -370,8 +391,164 @@ GraphicsBackend *graphics_backend_create()
         present_queue_family_index
     );
 
+    /*****************************************************************************************************************/
+    // Logical Device Creation
+    /*****************************************************************************************************************/
+
+    VkDeviceCreateInfo device_creation_information = {};
+    device_creation_information.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+
+    float queue_priority = 1.0f;
+    uint32_t queue_creation_information_count = 1;
+
+    VkDeviceQueueCreateInfo queue_creation_informations[2] = {};
+    queue_creation_informations[0].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+    queue_creation_informations[0].queueFamilyIndex = graphics_queue_family_index;
+    queue_creation_informations[0].pQueuePriorities = &queue_priority;
+    queue_creation_informations[0].queueCount = 1;
+
+    if (present_queue_family_index != graphics_queue_family_index)
+    {
+        queue_creation_information_count++;
+        queue_creation_informations[1].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+        queue_creation_informations[1].queueFamilyIndex = present_queue_family_index;
+        queue_creation_informations[1].pQueuePriorities = &queue_priority;
+        queue_creation_informations[1].queueCount = 1;
+    }
+
+    device_creation_information.pQueueCreateInfos = queue_creation_informations;
+    device_creation_information.queueCreateInfoCount = queue_creation_information_count;
+
+    uint32_t logical_device_extension_count = 0;
+    result = vkEnumerateDeviceExtensionProperties
+    (
+        graphics_backend->physical_device, NULL, &logical_device_extension_count, NULL
+    );
+
+    if (result != VK_SUCCESS)
+    {
+        fprintf(stderr, "ERROR: Failed to query logical device extension count: %s\n", string_VkResult(result));
+        graphics_backend_destroy(graphics_backend);
+        return NULL;
+    }
+
+    VkExtensionProperties *logical_device_extensions = malloc
+    (
+        logical_device_extension_count * sizeof(VkExtensionProperties)
+    );
+
+    if (logical_device_extensions == NULL)
+    {
+        fprintf(stderr, "ERROR: Failed to allocate memory for logical device extensions\n");
+        graphics_backend_destroy(graphics_backend);
+        return NULL;
+    }
+
+    result = vkEnumerateDeviceExtensionProperties
+    (
+        graphics_backend->physical_device, NULL, &logical_device_extension_count, logical_device_extensions
+    );
+  
+    if (result != VK_SUCCESS)
+    {
+        fprintf(stderr, "ERROR: Failed to query logical device extensions: %s\n", string_VkResult(result));
+        graphics_backend_destroy(graphics_backend);
+        free(logical_device_extensions);
+        return NULL;
+    }
+
+    // TODO: Enable the following logical device extensions for ray tracing or path tracing
+    // VK_KHR_acceleration_structure, VK_KHR_ray_tracing_pipeline, VK_KHR_deferred_host_operations
+    
+    // VK_KHR_SWAPCHAIN_EXTENSION_NAME - Enabled to be able present on a window surface
+    // VK_KHR_portability_subset - Enabled to be able to run Vulkan on a macOS via MoltenVK
+    const char *enabled_logical_device_extensions[] =
+    {
+        VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+        "VK_KHR_portability_subset"
+    };
+
+    uint32_t enabled_logical_device_extension_count =
+    (
+        sizeof(enabled_logical_device_extensions) / sizeof(enabled_logical_device_extensions[0])
+    );
+
+    for
+    (
+        uint32_t enabled_logical_device_extension_index = 0;
+        enabled_logical_device_extension_index < enabled_logical_device_extension_count;
+        ++enabled_logical_device_extension_index
+    )
+    {
+        VkBool32 logical_device_extension_found = VK_FALSE;
+        const char *enabled_logical_device_extension_name =
+        (
+            enabled_logical_device_extensions[enabled_logical_device_extension_index]
+        );
+
+        for
+        (
+            uint32_t logical_device_extension_index = 0;
+            logical_device_extension_index < logical_device_extension_count;
+            ++logical_device_extension_index
+        )
+        {
+            const char *logical_device_extension_name =
+            (
+                logical_device_extensions[logical_device_extension_index].extensionName
+            );
+
+            if (strcmp(enabled_logical_device_extension_name, logical_device_extension_name) == 0)
+            {
+                logical_device_extension_found = VK_TRUE;
+                break;
+            }
+        }
+
+        if (logical_device_extension_found == VK_FALSE)
+        {
+            fprintf
+            (
+                stderr, "ERROR: Logical device extension '%s' requested, but not found\n",
+                enabled_logical_device_extension_name
+            );
+
+            graphics_backend_destroy(graphics_backend);
+            free(logical_device_extensions);
+            return NULL;
+        }
+    }
+    
+    free(logical_device_extensions);
+    device_creation_information.enabledExtensionCount = enabled_logical_device_extension_count;
+    device_creation_information.ppEnabledExtensionNames = enabled_logical_device_extensions;
+
+    const char *logical_device_validation_layers[] =
+    {
+        "VK_LAYER_KHRONOS_validation"
+    };
+
+    device_creation_information.enabledLayerCount = 1;
+    device_creation_information.ppEnabledLayerNames = logical_device_validation_layers;
+
+    result = vkCreateDevice
+    (
+        graphics_backend->physical_device, &device_creation_information, NULL, &graphics_backend->logical_device
+    );
+
+    if (result != VK_SUCCESS)
+    {
+        fprintf(stderr, "ERROR: Failed to create logical device: %s\n", string_VkResult(result));
+        graphics_backend_destroy(graphics_backend);
+        return NULL;
+    }
+
     return graphics_backend;
 }
+
+/*********************************************************************************************************************/
+// Graphics Backend Destruction Function
+/*********************************************************************************************************************/
 
 void graphics_backend_destroy(GraphicsBackend *graphics_backend)
 {
@@ -379,6 +556,8 @@ void graphics_backend_destroy(GraphicsBackend *graphics_backend)
     {
         return;
     }
+
+    vkDestroyDevice(graphics_backend->logical_device, NULL);
 
     if (graphics_backend->vulkan_instance != NULL)
     {
@@ -404,6 +583,10 @@ void graphics_backend_destroy(GraphicsBackend *graphics_backend)
     vkDestroyInstance(graphics_backend->vulkan_instance, NULL);
     free(graphics_backend);
 }
+
+/*********************************************************************************************************************/
+// Vulkan Debug Messenger Callback Function
+/*********************************************************************************************************************/
 
 static inline VkBool32 vulkan_debug_messenger_callback
 (
@@ -484,6 +667,10 @@ static inline VkBool32 vulkan_debug_messenger_callback
 
     return VK_FALSE;
 }
+
+/*********************************************************************************************************************/
+// Physical Device Criteria
+/*********************************************************************************************************************/
 
 static inline uint32_t rate_physical_device_properties(VkPhysicalDevice physical_device)
 {
