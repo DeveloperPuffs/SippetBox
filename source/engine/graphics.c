@@ -310,7 +310,7 @@ static inline VkBool32 vulkan_debug_messenger_callback
     {
         fprintf(stderr, "WARNING (%s): %s\n", type_string, callback_data->pMessage);
     }
-    
+
     if (message_severity_flags & VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT)
     {
         fprintf(stdout, "INFORMATION (%s): %s\n", type_string, callback_data->pMessage);
