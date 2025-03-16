@@ -246,29 +246,80 @@ void graphics_backend_destroy(GraphicsBackend *graphics_backend)
 
 static inline VkBool32 vulkan_debug_messenger_callback
 (
-    VkDebugUtilsMessageSeverityFlagBitsEXT severity, VkDebugUtilsMessageTypeFlagsEXT type,
+    VkDebugUtilsMessageSeverityFlagBitsEXT message_severity_flags, VkDebugUtilsMessageTypeFlagsEXT message_type_flags,
     const VkDebugUtilsMessengerCallbackDataEXT* callback_data, void* user_data
 )
 {
-    if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
+    char type_string[64] = {0};
+    VkBool32 leading_comma = VK_FALSE;
+
+    if (message_type_flags & VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT)
     {
-        fprintf(stderr, "ERROR: %s\n", callback_data->pMessage);
+        snprintf(type_string, sizeof(type_string), "GENERAL");
+        leading_comma = VK_TRUE;
     }
 
-    if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
+    if (message_type_flags & VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT)
     {
-        fprintf(stderr, "WARNING: %s\n", callback_data->pMessage);
-    }
-    
-    if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT)
-    {
-        fprintf(stdout, "INFORMATION: %s\n", callback_data->pMessage);
+        if (leading_comma)
+        {
+            size_t length = strlen(type_string);
+            snprintf(type_string + length, sizeof(type_string) - length, ", VALIDATION");
+        }
+        else
+        {
+            snprintf(type_string, sizeof(type_string), "VALIDATION");
+            leading_comma = VK_TRUE;
+        }
     }
 
-    if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT)
+    if (message_type_flags & VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT)
     {
-        fprintf(stderr, "DEBUG: %s\n", callback_data->pMessage);
+        if (leading_comma)
+        {
+            size_t length = strlen(type_string);
+            snprintf(type_string + length, sizeof(type_string) - length, ", PERFORMANCE");
+        }
+        else
+        {
+            snprintf(type_string, sizeof(type_string), "PERFORMANCE");
+            leading_comma = VK_TRUE;
+        }
+    }
+
+    if (message_type_flags & VK_DEBUG_UTILS_MESSAGE_TYPE_DEVICE_ADDRESS_BINDING_BIT_EXT)
+    {
+        if (leading_comma)
+        {
+            size_t length = strlen(type_string);
+            snprintf(type_string + length, sizeof(type_string) - length, ", DEVIVE_ADDRESS_BINDING");
+        }
+        else
+        {
+            snprintf(type_string, sizeof(type_string), "DEVIVE_ADDRESS_BINDING");
+            leading_comma = VK_TRUE;
+        }
+    }
+
+    if (message_severity_flags & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
+    {
+        fprintf(stderr, "ERROR (%s): %s\n", type_string, callback_data->pMessage);
+    }
+
+    if (message_severity_flags & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
+    {
+        fprintf(stderr, "WARNING (%s): %s\n", type_string, callback_data->pMessage);
     }
     
+    if (message_severity_flags & VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT)
+    {
+        fprintf(stdout, "INFORMATION (%s): %s\n", type_string, callback_data->pMessage);
+    }
+
+    if (message_severity_flags & VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT)
+    {
+        fprintf(stdout, "DEBUG (%s): %s\n", type_string, callback_data->pMessage);
+    }
+
     return VK_FALSE;
 }
