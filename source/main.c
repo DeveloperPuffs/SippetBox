@@ -69,16 +69,9 @@ static bool update(State *state)
 
 static void terminate(State *state, int exit_code)
 {
-    if (state->graphics_backend != NULL)
-    {
-        graphics_backend_destroy(state->graphics_backend);
-    }
-
-    if (state->window != NULL)
-    {
-        SDL_DestroyWindow(state->window);
-    }
-
+    graphics_backend_destroy(state->graphics_backend);
+    
+    SDL_DestroyWindow(state->window);
     SDL_Vulkan_UnloadLibrary();
     SDL_Quit();
     
