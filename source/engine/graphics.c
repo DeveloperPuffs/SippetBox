@@ -26,6 +26,12 @@ static inline VkBool32 vulkan_debug_messenger_callback
     const VkDebugUtilsMessengerCallbackDataEXT* callback_data, void* user_data
 );
 
+static inline uint32_t rate_physical_device_properties(VkPhysicalDevice physical_device);
+static inline uint32_t rate_physical_device_features(VkPhysicalDevice physical_device);
+static inline uint32_t rate_physical_device_memory(VkPhysicalDevice physical_device);
+static inline uint32_t rate_physical_device_queue_families(VkPhysicalDevice physical_device);
+static inline uint32_t rate_physical_device_extensions(VkPhysicalDevice physical_device);
+
 GraphicsBackend *graphics_backend_create()
 {
     VkResult result;
@@ -209,6 +215,68 @@ GraphicsBackend *graphics_backend_create()
         return NULL;
     }
 
+    uint32_t physical_device_count;
+    result = vkEnumeratePhysicalDevices(graphics_backend->vulkan_instance, &physical_device_count, NULL);
+    if (result != VK_SUCCESS)
+    {
+        fprintf(stderr, "ERROR: Failed to query physical device count: %s\n", string_VkResult(result));
+        graphics_backend_destroy(graphics_backend);
+        return NULL;
+    }
+
+    if (physical_device_count == 0)
+    {
+        fprintf(stderr, "ERROR: No physical device found\n");
+        graphics_backend_destroy(graphics_backend);
+        return NULL;
+    }
+
+    VkPhysicalDevice *physical_devices = malloc(physical_device_count * sizeof(VkPhysicalDevice));
+    if (physical_devices == NULL)
+    {
+        fprintf(stderr, "ERROR: Failed to allocate memory for physical devices\n");
+        graphics_backend_destroy(graphics_backend);
+        return NULL;
+    }
+
+    result = vkEnumeratePhysicalDevices(graphics_backend->vulkan_instance, &physical_device_count, physical_devices);
+    if (result != VK_SUCCESS)
+    {
+        fprintf(stderr, "ERROR: Failed to query physical devices: %s\n", string_VkResult(result));
+        graphics_backend_destroy(graphics_backend);
+        return NULL;
+    }
+
+    uint32_t best_score = 0;
+    for (uint32_t physical_device_index = 0; physical_device_index < physical_device_count; ++physical_device_index)
+    {
+        VkPhysicalDevice physical_device = physical_devices[physical_device_index];
+        uint32_t score =
+        (
+            rate_physical_device_properties(physical_device) +
+            rate_physical_device_features(physical_device) +
+            rate_physical_device_memory(physical_device) +
+            rate_physical_device_queue_families(physical_device) +
+            rate_physical_device_extensions(physical_device)
+        );
+
+        if (score > best_score)
+        {
+            graphics_backend->physical_device = physical_device;
+            best_score = score;
+        }
+    }
+
+    free(physical_devices);
+    if (best_score == 0)
+    {
+        fprintf(stderr, "ERROR: Failed to find suitable physical device\n");
+        graphics_backend_destroy(graphics_backend);
+        return NULL;
+    }
+
+    fprintf(stdout, "INFORMATION: Selected physical device with score %d\n", best_score);
+    
     return graphics_backend;
 }
 
@@ -322,4 +390,153 @@ static inline VkBool32 vulkan_debug_messenger_callback
     }
 
     return VK_FALSE;
+}
+
+static inline uint32_t rate_physical_device_properties(VkPhysicalDevice physical_device)
+{
+    uint32_t score = 0;
+
+    VkPhysicalDeviceProperties device_properties;
+    vkGetPhysicalDeviceProperties(physical_device, &device_properties);
+
+    // It would be nice to have the physical device support Vulkan version 1.3 at least
+    uint32_t api_version = device_properties.apiVersion;
+    uint32_t major_version = VK_VERSION_MAJOR(api_version);
+    uint32_t minor_version = VK_VERSION_MINOR(api_version);
+    if (major_version >= 2 || (major_version == 1 && minor_version >= 3))
+    {
+        score += 500;
+    }
+
+    if (device_properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
+    {
+        score += 1000;
+    }
+
+    VkPhysicalDeviceLimits limits = device_properties.limits;
+    score += limits.maxImageDimension2D;
+
+    return score;
+}
+
+static inline uint32_t rate_physical_device_features(VkPhysicalDevice physical_device)
+{
+    uint32_t score = 0;
+
+    VkPhysicalDeviceFeatures device_features;
+    vkGetPhysicalDeviceFeatures(physical_device, &device_features);
+
+    if (device_features.samplerAnisotropy == VK_TRUE)
+    {
+        score += 500;
+    }
+
+    if (device_features.geometryShader == VK_TRUE)
+    {
+        score += 200;
+    }
+
+    return score;
+}
+
+static inline uint32_t rate_physical_device_memory(VkPhysicalDevice physical_device)
+{
+    uint32_t score = 0;
+
+    VkPhysicalDeviceMemoryProperties memory_properties;
+    vkGetPhysicalDeviceMemoryProperties(physical_device, &memory_properties);
+
+    uint32_t total_memory = 0;
+    for (uint32_t memory_heap_index = 0; memory_heap_index < memory_properties.memoryHeapCount; memory_heap_index++)
+    {
+        VkMemoryHeap memory_heap = memory_properties.memoryHeaps[memory_heap_index];
+        if (memory_heap.flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT)
+        {
+            // The total memory will be converted to megabytes
+            total_memory += memory_heap.size / (1024 * 1024);
+        }
+    }
+
+    return total_memory / 10;
+}
+
+static inline uint32_t rate_physical_device_queue_families(VkPhysicalDevice physical_device)
+{
+    uint32_t score = 0;
+
+    uint32_t queue_family_count;
+    vkGetPhysicalDeviceQueueFamilyProperties(physical_device, &queue_family_count, NULL);
+
+    VkQueueFamilyProperties *queue_families = malloc(queue_family_count * sizeof(VkQueueFamilyProperties));
+    if (queue_families == NULL)
+    {
+        fprintf(stderr, "ERROR: Failed to allocate memory for physical device queue families\n");
+        return score;
+    }
+
+    vkGetPhysicalDeviceQueueFamilyProperties(physical_device, &queue_family_count, queue_families);
+    for (uint32_t queue_family_index = 0; queue_family_index < queue_family_count; ++queue_family_index)
+    {
+        VkQueueFlags queue_family_flags = queue_families[queue_family_index].queueFlags;
+
+        if (queue_family_flags & VK_QUEUE_GRAPHICS_BIT)
+        {
+            score += 500;
+        }
+
+        if (queue_family_flags & VK_QUEUE_COMPUTE_BIT)
+        {
+            score += 300;
+        }
+        
+        if (queue_family_flags & VK_QUEUE_TRANSFER_BIT)
+        {
+            score += 200;
+        }
+    }
+
+    free(queue_families);
+    return score;
+}
+
+static inline uint32_t rate_physical_device_extensions(VkPhysicalDevice physical_device)
+{
+    VkResult result;
+    uint32_t score = 0;
+
+    uint32_t extension_count;
+    result = vkEnumerateDeviceExtensionProperties(physical_device, NULL, &extension_count, NULL);
+    if (result != VK_SUCCESS)
+    {
+        fprintf(stderr, "WARNING: Failed to query physical device extension count: %s\n", string_VkResult(result));
+        return score;
+    }
+
+    VkExtensionProperties *extensions = malloc(extension_count * sizeof(VkExtensionProperties));
+    if (extensions == NULL)
+    {
+        fprintf(stderr, "ERROR: Failed to allocate memory for physical device extensions\n");
+        return score;
+    }
+    
+    result = vkEnumerateDeviceExtensionProperties(physical_device, NULL, &extension_count, extensions);
+    if (result != VK_SUCCESS)
+    {
+        fprintf(stderr, "WARNING: Failed to query physical device extensions: %s\n", string_VkResult(result));
+        free(extensions);
+        return score;
+    }
+    
+    for (uint32_t extension_index = 0; extension_index < extension_count; ++extension_index)
+    {
+        const char *extension_name = extensions[extension_index].extensionName;
+        if (strcmp(extension_name, VK_KHR_SWAPCHAIN_EXTENSION_NAME) == 0)
+        {
+            score += 1000;
+            break;
+        }
+    }
+
+    free(extensions);
+    return score;
 }
