@@ -276,7 +276,100 @@ GraphicsBackend *graphics_backend_create()
     }
 
     fprintf(stdout, "INFORMATION: Selected physical device with score %d\n", best_score);
-    
+
+    uint32_t queue_family_count = 0;
+    vkGetPhysicalDeviceQueueFamilyProperties(graphics_backend->physical_device, &queue_family_count, NULL);
+
+    VkQueueFamilyProperties *queue_families = malloc(queue_family_count * sizeof(VkQueueFamilyProperties));
+    if (queue_families == NULL)
+    {
+        fprintf(stdout, "ERROR: Failed to allocate memory for queue families\n");
+        graphics_backend_destroy(graphics_backend);
+        return NULL;
+    }
+
+    vkGetPhysicalDeviceQueueFamilyProperties(graphics_backend->physical_device, &queue_family_count, queue_families);
+
+    // A window and a window surface have to be created to ensure that the present queue family supports presenting to
+    // a window surface created in this context
+    SDL_Window *window_model = SDL_CreateWindow("", 1, 1, SDL_WINDOW_VULKAN);
+    if (window_model == NULL)
+    {
+        fprintf(stderr, "ERROR: Failed to create window model: %s\n", SDL_GetError());
+        graphics_backend_destroy(graphics_backend);
+        free(queue_families);
+        return NULL;
+    }
+
+    VkSurfaceKHR surface_model;
+    if (SDL_Vulkan_CreateSurface(window_model, graphics_backend->vulkan_instance, NULL, &surface_model) == false)
+    {
+        fprintf(stderr, "ERROR: Failed to create surface model: %s\n", SDL_GetError());
+        graphics_backend_destroy(graphics_backend);
+        SDL_DestroyWindow(window_model);
+        free(queue_families);
+        return NULL;
+    }
+
+    uint32_t graphics_queue_family_index = UINT32_MAX;
+    uint32_t present_queue_family_index = UINT32_MAX;
+    for (uint32_t queue_family_index = 0; queue_family_index < queue_family_count; ++queue_family_index)
+    {
+        if (queue_families[queue_family_index].queueFlags & VK_QUEUE_GRAPHICS_BIT)
+        {
+            if (graphics_queue_family_index == UINT32_MAX)
+            {
+                graphics_queue_family_index = queue_family_index;
+            }
+        }
+
+        VkBool32 supports_presenting = VK_FALSE;
+        result = vkGetPhysicalDeviceSurfaceSupportKHR
+        (
+            graphics_backend->physical_device, queue_family_index, surface_model, &supports_presenting
+        );
+
+        if (result != VK_SUCCESS)
+        {
+            fprintf
+            (
+                stderr,
+                "WARNING: Failed to query physical device surface queue family #%d presenting support verdict: %s",
+                queue_family_index, string_VkResult(result)
+            );
+
+            continue;
+        }
+
+        if (present_queue_family_index == UINT32_MAX && supports_presenting)
+        {
+            present_queue_family_index = queue_family_index;
+        }
+    }
+
+    vkDestroySurfaceKHR(graphics_backend->vulkan_instance, surface_model, NULL);
+    SDL_DestroyWindow(window_model);
+    free(queue_families);
+
+    if (graphics_queue_family_index == UINT32_MAX || present_queue_family_index == UINT32_MAX)
+    {
+        fprintf(stderr, "ERROR: Failed to find suitable queue family indices\n");
+        graphics_backend_destroy(graphics_backend);
+        return NULL;
+    }
+
+    fprintf
+    (
+        stdout, "INFORMATION: Using physical device queue family index %d for graphics queue family\n",
+        graphics_queue_family_index
+    );
+
+    fprintf
+    (
+        stdout, "INFORMATION: Using physical device queue family index %d for present queue family\n",
+        present_queue_family_index
+    );
+
     return graphics_backend;
 }
 
