@@ -191,7 +191,7 @@ GraphicsBackend *graphics_backend_create()
 
     if (debug_messenger_creation_function == NULL)
     {
-        fprintf(stderr, "Failed to query debug messenger creation function\n");
+        fprintf(stderr, "ERROR: Failed to query debug messenger creation function\n");
         graphics_backend_destroy(graphics_backend);
         return NULL;
     }
@@ -204,7 +204,7 @@ GraphicsBackend *graphics_backend_create()
 
     if (result != VK_SUCCESS)
     {
-        fprintf(stderr, "Failed to create debug messenger: %s\n", string_VkResult(result));
+        fprintf(stderr, "ERROR: Failed to create debug messenger: %s\n", string_VkResult(result));
         graphics_backend_destroy(graphics_backend);
         return NULL;
     }
