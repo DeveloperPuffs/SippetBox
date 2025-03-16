@@ -20,6 +20,12 @@ typedef struct GraphicsBackend
     VkQueue present_queue;
 } GraphicsBackend;
 
+static inline VkBool32 vulkan_debug_messenger_callback
+(
+    VkDebugUtilsMessageSeverityFlagBitsEXT severity, VkDebugUtilsMessageTypeFlagsEXT type,
+    const VkDebugUtilsMessengerCallbackDataEXT* callback_data, void* user_data
+);
+
 GraphicsBackend *graphics_backend_create()
 {
     VkResult result;
@@ -31,11 +37,11 @@ GraphicsBackend *graphics_backend_create()
         return NULL;
     }
 
-    VkInstanceCreateInfo instance_creation_information = {};
+    VkInstanceCreateInfo instance_creation_information = {0};
     instance_creation_information.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     instance_creation_information.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
-    
-    VkApplicationInfo application_information = {};
+
+    VkApplicationInfo application_information = {0};
     application_information.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
     application_information.pApplicationName = "SippetBox";
     application_information.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
@@ -113,7 +119,7 @@ GraphicsBackend *graphics_backend_create()
         graphics_backend_destroy(graphics_backend);
         return NULL;
     }
-    
+
     // An array of the required (not SDL) extensions, it should be fine if I just hardcode this for now
     const char *required_extensions[] =
     {
@@ -157,11 +163,112 @@ GraphicsBackend *graphics_backend_create()
         return NULL;
     }
 
+    VkDebugUtilsMessengerCreateInfoEXT debug_messenger_creation_information = {0};
+    debug_messenger_creation_information.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+    debug_messenger_creation_information.pfnUserCallback = vulkan_debug_messenger_callback;
+    debug_messenger_creation_information.pUserData = NULL;
+
+    debug_messenger_creation_information.messageSeverity =
+    (
+        VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT |
+        VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
+        VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT |
+        VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT
+    );
+
+    debug_messenger_creation_information.messageType =
+    (
+        VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+        VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+        VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT
+    );
+
+    PFN_vkCreateDebugUtilsMessengerEXT debug_messenger_creation_function =
+    (
+        (PFN_vkCreateDebugUtilsMessengerEXT)
+        vkGetInstanceProcAddr(graphics_backend->vulkan_instance, "vkCreateDebugUtilsMessengerEXT")
+    );
+
+    if (debug_messenger_creation_function == NULL)
+    {
+        fprintf(stderr, "Failed to query debug messenger creation function\n");
+        graphics_backend_destroy(graphics_backend);
+        return NULL;
+    }
+
+    result = debug_messenger_creation_function
+    (
+        graphics_backend->vulkan_instance, &debug_messenger_creation_information, NULL,
+        &graphics_backend->debug_messenger
+    );
+
+    if (result != VK_SUCCESS)
+    {
+        fprintf(stderr, "Failed to create debug messenger: %s\n", string_VkResult(result));
+        graphics_backend_destroy(graphics_backend);
+        return NULL;
+    }
+
     return graphics_backend;
 }
 
 void graphics_backend_destroy(GraphicsBackend *graphics_backend)
 {
+    if (graphics_backend == NULL)
+    {
+        return;
+    }
+
+    if (graphics_backend->vulkan_instance != NULL)
+    {
+        PFN_vkDestroyDebugUtilsMessengerEXT debug_messenger_destruction_function =
+        (
+            (PFN_vkDestroyDebugUtilsMessengerEXT)
+            vkGetInstanceProcAddr(graphics_backend->vulkan_instance, "vkDestroyDebugUtilsMessengerEXT")
+        );
+
+        if (debug_messenger_destruction_function)
+        {
+            debug_messenger_destruction_function
+            (
+                graphics_backend->vulkan_instance, graphics_backend->debug_messenger, NULL
+            );
+        }
+        else
+        {
+            fprintf(stderr, "WARNING: Failed to query debug messenger destruction function\n");
+        }
+    }
+
     vkDestroyInstance(graphics_backend->vulkan_instance, NULL);
     free(graphics_backend);
+}
+
+static inline VkBool32 vulkan_debug_messenger_callback
+(
+    VkDebugUtilsMessageSeverityFlagBitsEXT severity, VkDebugUtilsMessageTypeFlagsEXT type,
+    const VkDebugUtilsMessengerCallbackDataEXT* callback_data, void* user_data
+)
+{
+    if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
+    {
+        fprintf(stderr, "ERROR: %s\n", callback_data->pMessage);
+    }
+
+    if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
+    {
+        fprintf(stderr, "WARNING: %s\n", callback_data->pMessage);
+    }
+    
+    if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT)
+    {
+        fprintf(stdout, "INFORMATION: %s\n", callback_data->pMessage);
+    }
+
+    if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT)
+    {
+        fprintf(stderr, "DEBUG: %s\n", callback_data->pMessage);
+    }
+    
+    return VK_FALSE;
 }
