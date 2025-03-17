@@ -64,8 +64,10 @@ GraphicsBackend *graphics_backend_create()
     application_information.apiVersion = VK_API_VERSION_1_0;
     instance_creation_information.pApplicationInfo = &application_information;
 
-    // VK_LAYER_KHRONOS_validation - Enabled for reporting error messages about potential API misuse and, performance
-    // issues, or invalid synchronization
+    /*
+        "VK_LAYER_KHRONOS_validation"
+        For reporting error messages about potential API misuse and, performance issues, or invalid synchronization
+    */
     const char *instance_layers[] =
     {
         "VK_LAYER_KHRONOS_validation"
@@ -84,8 +86,13 @@ GraphicsBackend *graphics_backend_create()
         return NULL;
     }
 
-    // VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME - Enabled to be able to run Vulkan on a macOS via MoltenVK
-    // VK_EXT_DEBUG_UTILS_EXTENSION_NAME - Enabled to be able to setup a debug messenger with the instance
+    /*
+        VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME
+        For running Vulkan on a macOS environment via MoltenVK
+
+        VK_EXT_DEBUG_UTILS_EXTENSION_NAME
+        For setting up a debug messenger associated with the Vulkan instance
+    */
     const char *additional_instance_extensions[] =
     {
         VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME,
@@ -352,6 +359,7 @@ GraphicsBackend *graphics_backend_create()
 
     VkDeviceCreateInfo device_creation_information = {};
     device_creation_information.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+    device_creation_information.pNext = NULL;
 
     float queue_priority = 1.0f;
     uint32_t queue_creation_information_count = 1;
@@ -374,11 +382,30 @@ GraphicsBackend *graphics_backend_create()
     device_creation_information.pQueueCreateInfos = queue_creation_informations;
     device_creation_information.queueCreateInfoCount = queue_creation_information_count;
 
+    /*
+        "VK_LAYER_KHRONOS_validation"
+        For reporting error messages about potential API misuse and, performance issues, or invalid synchronization
+    */
+    const char *logical_device_layers[] =
+    {
+        "VK_LAYER_KHRONOS_validation"
+    };
+
+    size_t logical_device_layer_count = sizeof(logical_device_layers) / sizeof(logical_device_layers[0]);
+
+    device_creation_information.enabledLayerCount = logical_device_layer_count;
+    device_creation_information.ppEnabledLayerNames = logical_device_layers;
+
     // TODO: Enable the following logical device extensions for ray tracing or path tracing:
     // VK_KHR_acceleration_structure, VK_KHR_ray_tracing_pipeline, VK_KHR_deferred_host_operations
-    
-    // VK_KHR_SWAPCHAIN_EXTENSION_NAME - Enabled to be able present on a window surface
-    // VK_KHR_portability_subset - Enabled to be able to run Vulkan on a macOS via MoltenVK
+
+    /*
+        VK_KHR_SWAPCHAIN_EXTENSION_NAME
+        or presenting on a window surface
+
+        "VK_KHR_portability_subset"
+        For running Vulkan on a macOS environment via MoltenVK
+    */
     const char *logical_device_extensions[] =
     {
         VK_KHR_SWAPCHAIN_EXTENSION_NAME,
@@ -389,18 +416,6 @@ GraphicsBackend *graphics_backend_create()
 
     device_creation_information.enabledExtensionCount = logical_device_extension_count;
     device_creation_information.ppEnabledExtensionNames = logical_device_extensions;
-
-    // VK_LAYER_KHRONOS_validation - Enabled for reporting error messages about potential API misuse and, performance
-    // issues, or invalid synchronization
-    const char *logical_device_layers[] =
-    {
-        "VK_LAYER_KHRONOS_validation"
-    };
-
-    size_t logical_device_layer_count = sizeof(logical_device_layers) / sizeof(logical_device_layers[0]);
-
-    device_creation_information.enabledLayerCount = logical_device_layer_count;
-    device_creation_information.ppEnabledLayerNames = logical_device_layers;
 
     result = vkCreateDevice
     (
