@@ -37,6 +37,14 @@ typedef struct Window
     VkFence *fences;
 } Window;
 
+typedef struct Renderer
+{
+    VkPipeline pipeline;
+    VkRenderPass render_pass;
+    VkCommandPool command_pool;
+    VkCommandBuffer *command_buffers;
+} Renderer;
+
 /*********************************************************************************************************************/
 // Context Functions
 /*********************************************************************************************************************/
@@ -778,4 +786,34 @@ void window_destroy(Window *window)
 
     SDL_DestroyWindow(window->sdl_window_handle);
     free(window);
+}
+
+/*********************************************************************************************************************/
+// Renderer Creation Function
+/*********************************************************************************************************************/
+
+Renderer *renderer_create()
+{
+    Renderer *renderer = (Renderer *)calloc(1, sizeof(Renderer));
+    if (renderer == NULL)
+    {
+        fprintf(stderr, "ERROR: Failed to allocate memory for renderer instance\n");
+        return NULL;
+    }
+
+    return renderer;
+}
+
+/*********************************************************************************************************************/
+// Renderer Destruction Function
+/*********************************************************************************************************************/
+
+void renderer_destroy(Renderer *renderer)
+{
+    if (renderer == NULL)
+    {
+        return;
+    }
+
+    free(renderer);
 }

@@ -10,6 +10,7 @@ typedef struct
 {
     Context *context;
     Window *window;
+    Renderer *renderer;
 } State;
 
 static bool update(State *state);
@@ -20,6 +21,7 @@ int main()
     State state = {};
     state.context = NULL;
     state.window = NULL;
+    state.renderer = NULL;
 
     if (SDL_Init(SDL_INIT_VIDEO) == false)
     {
@@ -36,7 +38,7 @@ int main()
     state.context = context_create();
     if (state.context == NULL)
     {
-        fprintf(stderr, "ERROR: Failed to create graphics backend instance\n");
+        fprintf(stderr, "ERROR: Failed to create context instance\n");
         terminate(&state, EXIT_FAILURE);
     }
 
@@ -44,6 +46,13 @@ int main()
     if (state.window == NULL)
     {
         fprintf(stderr, "ERROR: Failed to create window instance\n");
+        terminate(&state, EXIT_FAILURE);
+    }
+
+    state.renderer = renderer_create();
+    if (state.renderer == NULL)
+    {
+        fprintf(stderr, "ERROR: Failed to create renderer instance\n");
         terminate(&state, EXIT_FAILURE);
     }
 
@@ -69,6 +78,7 @@ static bool update(State *state)
 
 static void terminate(State *state, int exit_code)
 {
+    renderer_destroy(state->renderer);
     window_destroy(state->window);
     context_destroy(state->context);
     SDL_Vulkan_UnloadLibrary();
