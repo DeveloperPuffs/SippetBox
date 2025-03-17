@@ -4,8 +4,7 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
 
-#include <engine/context.h>
-#include <engine/window.h>
+#include <engine/graphics.h>
 
 typedef struct
 {

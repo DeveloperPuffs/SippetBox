@@ -2,11 +2,16 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
 #include <vulkan/vulkan.h>
 #include <vulkan/vk_enum_string_helper.h>
 
-#include <engine/context.h>
+#include <engine/graphics.h>
+
+/*********************************************************************************************************************/
+// Context and Window Definitions
+/*********************************************************************************************************************/
 
 typedef struct Context
 {
@@ -19,6 +24,22 @@ typedef struct Context
     VkQueue graphics_queue;
     VkQueue present_queue;
 } Context;
+
+typedef struct Window
+{
+    SDL_Window *sdl_window_handle;
+    VkSurfaceKHR surface;
+    VkSwapchainKHR swapchain;
+    VkImage *images;
+    VkImageView *image_views;
+    VkFramebuffer *framebuffers;
+    VkSemaphore *semaphores;
+    VkFence *fences;
+} Window;
+
+/*********************************************************************************************************************/
+// Context Functions
+/*********************************************************************************************************************/
 
 static inline VkBool32 vulkan_debug_messenger_callback
 (
@@ -718,4 +739,43 @@ static inline uint32_t rate_physical_device_extensions(VkPhysicalDevice physical
 
     free(extensions);
     return score;
+}
+
+/*********************************************************************************************************************/
+// Window Creation Function
+/*********************************************************************************************************************/
+
+Window *window_create(const char *title, int initial_width, int initial_height)
+{
+    Window *window = (Window *)calloc(1, sizeof(Window));
+    if (window == NULL)
+    {
+        fprintf(stderr, "ERROR: Failed to allocate memory for window instance\n");
+        return NULL;
+    }
+
+    window->sdl_window_handle = SDL_CreateWindow(title, initial_width, initial_height, SDL_WINDOW_VULKAN);
+    if (window->sdl_window_handle == NULL)
+    {
+        fprintf(stderr, "ERROR: Failed to create SDL window: %s\n", SDL_GetError());
+        window_destroy(window);
+        return NULL;
+    }
+
+    return window;
+}
+
+/*********************************************************************************************************************/
+// Window Destruction Function
+/*********************************************************************************************************************/
+
+void window_destroy(Window *window)
+{
+    if (window == NULL)
+    {
+        return;
+    }
+
+    SDL_DestroyWindow(window->sdl_window_handle);
+    free(window);
 }
