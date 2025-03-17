@@ -1,4 +1,3 @@
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -8,6 +7,7 @@
 #include <vulkan/vk_enum_string_helper.h>
 
 #include <engine/platform.h>
+#include <engine/logging.h>
 
 #include <engine/graphics.h>
 
@@ -77,7 +77,7 @@ Context *context_create()
     Context *context = (Context *)calloc(1, sizeof(Context));
     if (context == NULL)
     {
-        fprintf(stderr, "ERROR: Failed to allocate memory for context instance\n");
+        log_error("Failed to allocate memory for context instance");
         return NULL;
     }
 
@@ -119,7 +119,7 @@ Context *context_create()
     const char *const *sdl_instance_extensions = SDL_Vulkan_GetInstanceExtensions(&sdl_instance_extension_count);
     if (sdl_instance_extensions == NULL)
     {
-        fprintf(stderr, "ERROR: Failed to query SDL Vulkan instance extensions: %s\n", SDL_GetError());
+        log_error("Failed to query SDL Vulkan instance extensions: %s", SDL_GetError());
         context_destroy(context);
         return NULL;
     }
@@ -157,7 +157,7 @@ Context *context_create()
     const char **instance_extensions = malloc(instance_extension_count * sizeof(const char *));
     if (instance_extensions == NULL)
     {
-        fprintf(stderr, "ERROR: Failed to allocate memory for extensions\n");
+        log_error("Failed to allocate memory for extensions");
         context_destroy(context);
         return NULL;
     }
@@ -184,7 +184,7 @@ Context *context_create()
 
     if (result != VK_SUCCESS)
     {
-        fprintf(stderr, "ERROR: Failed to create Vulkan instance: %s\n", string_VkResult(result));
+        log_error("Failed to create Vulkan instance: %s", string_VkResult(result));
         context_destroy(context);
         return NULL;
     }
@@ -221,7 +221,7 @@ Context *context_create()
 
     if (debug_messenger_creation_function == NULL)
     {
-        fprintf(stderr, "ERROR: Failed to query debug messenger creation function\n");
+        log_error("Failed to query debug messenger creation function");
         context_destroy(context);
         return NULL;
     }
@@ -233,7 +233,7 @@ Context *context_create()
 
     if (result != VK_SUCCESS)
     {
-        fprintf(stderr, "ERROR: Failed to create debug messenger: %s\n", string_VkResult(result));
+        log_error("Failed to create debug messenger: %s", string_VkResult(result));
         context_destroy(context);
         return NULL;
     }
@@ -246,14 +246,14 @@ Context *context_create()
     result = vkEnumeratePhysicalDevices(context->vulkan_instance, &physical_device_count, NULL);
     if (result != VK_SUCCESS)
     {
-        fprintf(stderr, "ERROR: Failed to query physical device count: %s\n", string_VkResult(result));
+        log_error("Failed to query physical device count: %s", string_VkResult(result));
         context_destroy(context);
         return NULL;
     }
 
     if (physical_device_count == 0)
     {
-        fprintf(stderr, "ERROR: No physical device found\n");
+        log_error("No physical device found");
         context_destroy(context);
         return NULL;
     }
@@ -261,7 +261,7 @@ Context *context_create()
     VkPhysicalDevice *physical_devices = malloc(physical_device_count * sizeof(VkPhysicalDevice));
     if (physical_devices == NULL)
     {
-        fprintf(stderr, "ERROR: Failed to allocate memory for physical devices\n");
+        log_error("Failed to allocate memory for physical devices");
         context_destroy(context);
         return NULL;
     }
@@ -269,7 +269,7 @@ Context *context_create()
     result = vkEnumeratePhysicalDevices(context->vulkan_instance, &physical_device_count, physical_devices);
     if (result != VK_SUCCESS)
     {
-        fprintf(stderr, "ERROR: Failed to query physical devices: %s\n", string_VkResult(result));
+        log_error("Failed to query physical devices: %s", string_VkResult(result));
         context_destroy(context);
         return NULL;
     }
@@ -297,12 +297,12 @@ Context *context_create()
     free(physical_devices);
     if (best_score == 0)
     {
-        fprintf(stderr, "ERROR: Failed to find suitable physical device\n");
+        log_error("Failed to find suitable physical device");
         context_destroy(context);
         return NULL;
     }
 
-    fprintf(stdout, "INFORMATION: Selected physical device with score %d\n", best_score);
+    log_information("Selected physical device with score %d", best_score);
     
     /*****************************************************************************************************************/
     // Graphics Queue Family Index and Present Queue Family Index Selection
@@ -314,7 +314,7 @@ Context *context_create()
     VkQueueFamilyProperties *queue_families = malloc(queue_family_count * sizeof(VkQueueFamilyProperties));
     if (queue_families == NULL)
     {
-        fprintf(stdout, "ERROR: Failed to allocate memory for queue families\n");
+        log_error("Failed to allocate memory for queue families");
         context_destroy(context);
         return NULL;
     }
@@ -326,7 +326,7 @@ Context *context_create()
     SDL_Window *window_model = SDL_CreateWindow("", 1, 1, SDL_WINDOW_VULKAN);
     if (window_model == NULL)
     {
-        fprintf(stderr, "ERROR: Failed to create window model: %s\n", SDL_GetError());
+        log_error("Failed to create window model: %s", SDL_GetError());
         context_destroy(context);
         free(queue_families);
         return NULL;
@@ -335,7 +335,7 @@ Context *context_create()
     VkSurfaceKHR surface_model;
     if (SDL_Vulkan_CreateSurface(window_model, context->vulkan_instance, NULL, &surface_model) == false)
     {
-        fprintf(stderr, "ERROR: Failed to create surface model: %s\n", SDL_GetError());
+        log_error("Failed to create surface model: %s", SDL_GetError());
         context_destroy(context);
         SDL_DestroyWindow(window_model);
         free(queue_families);
@@ -362,10 +362,9 @@ Context *context_create()
 
         if (result != VK_SUCCESS)
         {
-            fprintf
+            log_warning
             (
-                stderr,
-                "WARNING: Failed to query physical device surface queue family #%d presenting support verdict: %s",
+                "Failed to query physical device surface queue family #%d presenting support verdict: %s",
                 queue_family_index, string_VkResult(result)
             );
 
@@ -384,22 +383,10 @@ Context *context_create()
 
     if (graphics_queue_family_index == UINT32_MAX || present_queue_family_index == UINT32_MAX)
     {
-        fprintf(stderr, "ERROR: Failed to find suitable queue family indices\n");
+        log_error("Failed to find suitable queue family indices");
         context_destroy(context);
         return NULL;
     }
-
-    fprintf
-    (
-        stdout, "INFORMATION: Using physical device queue family index %d for graphics queue family\n",
-        graphics_queue_family_index
-    );
-
-    fprintf
-    (
-        stdout, "INFORMATION: Using physical device queue family index %d for present queue family\n",
-        present_queue_family_index
-    );
 
     /*****************************************************************************************************************/
     // Logical Device Creation
@@ -487,7 +474,7 @@ Context *context_create()
 
     if (result != VK_SUCCESS)
     {
-        fprintf(stderr, "ERROR: Failed to create logical device: %s\n", string_VkResult(result));
+        log_error("Failed to create logical device: %s", string_VkResult(result));
         context_destroy(context);
         return NULL;
     }
@@ -539,7 +526,7 @@ void context_destroy(Context *context)
         }
         else
         {
-            fprintf(stderr, "WARNING: Failed to query debug messenger destruction function\n");
+            log_warning("Failed to query debug messenger destruction function");
         }
     }
 
@@ -610,22 +597,22 @@ static inline VkBool32 vulkan_debug_messenger_callback
 
     if (message_severity_flags & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
     {
-        fprintf(stderr, "ERROR (%s): %s\n", type_string, callback_data->pMessage);
+        log_error("%s - %s", type_string, callback_data->pMessage);
     }
 
     if (message_severity_flags & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
     {
-        fprintf(stderr, "WARNING (%s): %s\n", type_string, callback_data->pMessage);
+        log_warning("%s - %s", type_string, callback_data->pMessage);
     }
 
     if (message_severity_flags & VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT)
     {
-        fprintf(stdout, "INFORMATION (%s): %s\n", type_string, callback_data->pMessage);
+        log_information("%s - %s", type_string, callback_data->pMessage);
     }
 
     if (message_severity_flags & VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT)
     {
-        fprintf(stdout, "DEBUG (%s): %s\n", type_string, callback_data->pMessage);
+        log_debug("%s - %s", type_string, callback_data->pMessage);
     }
 
     return VK_FALSE;
@@ -713,7 +700,7 @@ static inline uint32_t rate_physical_device_queue_families(VkPhysicalDevice phys
     VkQueueFamilyProperties *queue_families = malloc(queue_family_count * sizeof(VkQueueFamilyProperties));
     if (queue_families == NULL)
     {
-        fprintf(stderr, "ERROR: Failed to allocate memory for physical device queue families\n");
+        log_error("Failed to allocate memory for physical device queue families");
         return score;
     }
 
@@ -751,21 +738,21 @@ static inline uint32_t rate_physical_device_extensions(VkPhysicalDevice physical
     result = vkEnumerateDeviceExtensionProperties(physical_device, NULL, &extension_count, NULL);
     if (result != VK_SUCCESS)
     {
-        fprintf(stderr, "WARNING: Failed to query physical device extension count: %s\n", string_VkResult(result));
+        log_warning("Failed to query physical device extension count: %s", string_VkResult(result));
         return score;
     }
 
     VkExtensionProperties *extensions = malloc(extension_count * sizeof(VkExtensionProperties));
     if (extensions == NULL)
     {
-        fprintf(stderr, "ERROR: Failed to allocate memory for physical device extensions\n");
+        log_error("Failed to allocate memory for physical device extensions");
         return score;
     }
     
     result = vkEnumerateDeviceExtensionProperties(physical_device, NULL, &extension_count, extensions);
     if (result != VK_SUCCESS)
     {
-        fprintf(stderr, "WARNING: Failed to query physical device extensions: %s\n", string_VkResult(result));
+        log_warning("Failed to query physical device extensions: %s", string_VkResult(result));
         free(extensions);
         return score;
     }
@@ -792,14 +779,14 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
 {
     if (context == NULL)
     {
-        fprintf(stderr, "ERROR: Cannot create 'Window' if given 'Context' is 'NULL'\n");
+        log_error("Cannot create 'Window' if given 'Context' is 'NULL'");
         return NULL;
     }
 
     Window *window = (Window *)calloc(1, sizeof(Window));
     if (window == NULL)
     {
-        fprintf(stderr, "ERROR: Failed to allocate memory for window instance\n");
+        log_error("Failed to allocate memory for window instance");
         return NULL;
     }
 
@@ -808,7 +795,7 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
     window->sdl_window_handle = SDL_CreateWindow(title, initial_width, initial_height, SDL_WINDOW_VULKAN);
     if (window->sdl_window_handle == NULL)
     {
-        fprintf(stderr, "ERROR: Failed to create SDL window: %s\n", SDL_GetError());
+        log_error("Failed to create SDL window: %s", SDL_GetError());
         window_destroy(window);
         return NULL;
     }
@@ -839,14 +826,14 @@ Renderer *renderer_create(Window *window)
 {
     if (window == NULL)
     {
-        fprintf(stderr, "ERROR: Cannot create 'Renderer' if given 'Window' is 'NULL'\n");
+        log_error("Cannot create 'Renderer' if given 'Window' is 'NULL'");
         return NULL;
     }
 
     Renderer *renderer = (Renderer *)calloc(1, sizeof(Renderer));
     if (renderer == NULL)
     {
-        fprintf(stderr, "ERROR: Failed to allocate memory for renderer instance\n");
+        log_error("Failed to allocate memory for renderer instance");
         return NULL;
     }
 

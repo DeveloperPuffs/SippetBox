@@ -1,9 +1,9 @@
-#include <stdio.h>
 #include <stdlib.h>
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
 
+#include <engine/logging.h>
 #include <engine/graphics.h>
 
 typedef struct
@@ -25,34 +25,34 @@ int main()
 
     if (SDL_Init(SDL_INIT_VIDEO) == false)
     {
-        fprintf(stderr, "ERROR: Failed to initialize SDL\n");
+        log_error("Failed to initialize SDL");
         terminate(&state, EXIT_FAILURE);
     }
 
     if (SDL_Vulkan_LoadLibrary(NULL) == false)
     {
-        fprintf(stderr, "ERROR: Failed to load Vulkan Library with SDL\n");
+        log_error("Failed to load Vulkan Library with SDL");
         terminate(&state, EXIT_FAILURE);
     }
 
     state.context = context_create();
     if (state.context == NULL)
     {
-        fprintf(stderr, "ERROR: Failed to create context instance\n");
+        log_error("Failed to create context instance");
         terminate(&state, EXIT_FAILURE);
     }
 
     state.window = window_create("SippetBox", 640, 480, state.context);
     if (state.window == NULL)
     {
-        fprintf(stderr, "ERROR: Failed to create window instance\n");
+        log_error("Failed to create window instance");
         terminate(&state, EXIT_FAILURE);
     }
 
     state.renderer = renderer_create(state.window);
     if (state.renderer == NULL)
     {
-        fprintf(stderr, "ERROR: Failed to create renderer instance\n");
+        log_error("Failed to create renderer instance");
         terminate(&state, EXIT_FAILURE);
     }
 
