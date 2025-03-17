@@ -120,6 +120,7 @@ Context *context_create()
         return NULL;
     }
 
+#ifdef PLATFORM_APPLE
     /*
         VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME
         For running Vulkan on a macOS environment via MoltenVK
@@ -132,6 +133,16 @@ Context *context_create()
         VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME,
         VK_EXT_DEBUG_UTILS_EXTENSION_NAME
     };
+#else
+    /*
+        VK_EXT_DEBUG_UTILS_EXTENSION_NAME
+        For setting up a debug messenger associated with the Vulkan instance
+    */
+    const char *additional_instance_extensions[] =
+    {
+        VK_EXT_DEBUG_UTILS_EXTENSION_NAME
+    };
+#endif
 
     size_t additional_instance_extension_count =
     (
@@ -432,6 +443,7 @@ Context *context_create()
     // TODO: Enable the following logical device extensions for ray tracing or path tracing:
     // VK_KHR_acceleration_structure, VK_KHR_ray_tracing_pipeline, VK_KHR_deferred_host_operations
 
+#ifdef PLATFORM_APPLE
     /*
         VK_KHR_SWAPCHAIN_EXTENSION_NAME
         or presenting on a window surface
@@ -444,6 +456,16 @@ Context *context_create()
         VK_KHR_SWAPCHAIN_EXTENSION_NAME,
         "VK_KHR_portability_subset"
     };
+#else
+    /*
+        VK_KHR_SWAPCHAIN_EXTENSION_NAME
+        or presenting on a window surface
+    */
+    const char *logical_device_extensions[] =
+    {
+        VK_KHR_SWAPCHAIN_EXTENSION_NAME
+    };
+#endif
 
     size_t logical_device_extension_count = sizeof(logical_device_extensions) / sizeof(logical_device_extensions[0]);
 
