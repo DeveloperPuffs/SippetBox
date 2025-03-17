@@ -7,7 +7,7 @@
 typedef struct GraphicsBackend GraphicsBackend;
 
 /**
- * Creates an instance of `GraphicsBackend` along with its resources.
+ * Creates an instance of `GraphicsBackend` and initializes its resources.
  */
 GraphicsBackend *graphics_backend_create();
 
