@@ -42,14 +42,14 @@ int main()
         terminate(&state, EXIT_FAILURE);
     }
 
-    state.window = window_create("SippetBox", 640, 480);
+    state.window = window_create("SippetBox", 640, 480, state.context);
     if (state.window == NULL)
     {
         fprintf(stderr, "ERROR: Failed to create window instance\n");
         terminate(&state, EXIT_FAILURE);
     }
 
-    state.renderer = renderer_create();
+    state.renderer = renderer_create(state.window);
     if (state.renderer == NULL)
     {
         fprintf(stderr, "ERROR: Failed to create renderer instance\n");

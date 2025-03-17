@@ -27,6 +27,7 @@ typedef struct Context
 
 typedef struct Window
 {
+    Context *context;
     SDL_Window *sdl_window_handle;
     VkSurfaceKHR surface;
     VkSwapchainKHR swapchain;
@@ -39,6 +40,8 @@ typedef struct Window
 
 typedef struct Renderer
 {
+    Window *window;
+    Context *context;
     VkPipeline pipeline;
     VkRenderPass render_pass;
     VkCommandPool command_pool;
@@ -753,14 +756,22 @@ static inline uint32_t rate_physical_device_extensions(VkPhysicalDevice physical
 // Window Creation Function
 /*********************************************************************************************************************/
 
-Window *window_create(const char *title, int initial_width, int initial_height)
+Window *window_create(const char *title, int initial_width, int initial_height, Context *context)
 {
+    if (context == NULL)
+    {
+        fprintf(stderr, "ERROR: Cannot create 'Window' if given 'Context' is 'NULL'\n");
+        return NULL;
+    }
+
     Window *window = (Window *)calloc(1, sizeof(Window));
     if (window == NULL)
     {
         fprintf(stderr, "ERROR: Failed to allocate memory for window instance\n");
         return NULL;
     }
+
+    window->context = context;
 
     window->sdl_window_handle = SDL_CreateWindow(title, initial_width, initial_height, SDL_WINDOW_VULKAN);
     if (window->sdl_window_handle == NULL)
@@ -792,14 +803,23 @@ void window_destroy(Window *window)
 // Renderer Creation Function
 /*********************************************************************************************************************/
 
-Renderer *renderer_create()
+Renderer *renderer_create(Window *window)
 {
+    if (window == NULL)
+    {
+        fprintf(stderr, "ERROR: Cannot create 'Renderer' if given 'Window' is 'NULL'\n");
+        return NULL;
+    }
+
     Renderer *renderer = (Renderer *)calloc(1, sizeof(Renderer));
     if (renderer == NULL)
     {
         fprintf(stderr, "ERROR: Failed to allocate memory for renderer instance\n");
         return NULL;
     }
+
+    renderer->window = window;
+    renderer->context = window->context;
 
     return renderer;
 }

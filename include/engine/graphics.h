@@ -25,9 +25,9 @@ typedef struct Window Window;
 
 /**
  * Creates an instance of `Window` and initializes its resources. Opens an SDL window with the title as a string and
- * the initial dimensions of the window as positive integers. 
+ * the initial dimensions of the window as positive integers. Is associated with the given instance of `Context`.
  */
-Window *window_create(const char *title, int initial_width, int initial_height);
+Window *window_create(const char *title, int initial_width, int initial_height, Context *context);
 
 /**
  * Destroys an instance of `Window` by freeing its resources. Closes the SDL window associated with the given instance.
@@ -35,15 +35,16 @@ Window *window_create(const char *title, int initial_width, int initial_height);
 void window_destroy(Window *window);
 
 /**
- * Stores resources used for rendering on a specific environment (for example a 'Window' instance). Contains a
+ * Stores resources used for rendering on a specific environment (for example a `Window` instance). Contains a
  * pipeline, a render pass, a command pool, and command buffers.
  */
 typedef struct Renderer Renderer;
 
 /**
- * Creates an instance of `Renderer` and initializes its resources.
+ * Creates an instance of `Renderer` and initializes its resources. Is associated with the given instance of `Window`
+ * and its `Context`.
  */
-Renderer *renderer_create();
+Renderer *renderer_create(Window *window);
 
 /**
  * Destroys an instance of `Renderer` by freeing its resources.
