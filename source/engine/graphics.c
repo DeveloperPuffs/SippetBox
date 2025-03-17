@@ -64,70 +64,20 @@ GraphicsBackend *graphics_backend_create()
     application_information.apiVersion = VK_API_VERSION_1_0;
     instance_creation_information.pApplicationInfo = &application_information;
 
-    uint32_t layer_count;
-    result = vkEnumerateInstanceLayerProperties(&layer_count, NULL);
-    if (result != VK_SUCCESS)
-    {
-        fprintf(stderr, "ERROR: Failed to query layer count: %s\n", string_VkResult(result));
-        graphics_backend_destroy(graphics_backend);
-        return NULL;
-    }
-
-    VkLayerProperties *layers = malloc(sizeof(VkLayerProperties) * layer_count);
-    if (layers == NULL)
-    {
-        fprintf(stderr, "ERROR: Failed to allocate memory for layers\n");
-        graphics_backend_destroy(graphics_backend);
-        return NULL;
-    }
-
-    result = vkEnumerateInstanceLayerProperties(&layer_count, layers);
-    if (result != VK_SUCCESS)
-    {
-        fprintf(stderr, "ERROR: Failed to query layers: %s\n", string_VkResult(result));
-        graphics_backend_destroy(graphics_backend);
-        free(layers);
-        return NULL;
-    }
-
-    // An array of all of the requested layers, it should be fine if I just hardcode this for now
-    const char *requested_layers[] =
+    // VK_LAYER_KHRONOS_validation - Enabled for reporting error messages about potential API misuse and, performance
+    // issues, or invalid synchronization
+    const char *instance_layers[] =
     {
         "VK_LAYER_KHRONOS_validation"
     };
 
-    size_t requested_layers_count = sizeof(requested_layers) / sizeof(requested_layers[0]);
-    for (uint32_t requested_layer_index = 0; requested_layer_index < requested_layers_count; ++requested_layer_index)
-    {
-        VkBool32 layer_found = VK_FALSE;
-        const char *requested_layer = requested_layers[requested_layer_index];
-        for (uint32_t layer_index = 0; layer_index < layer_count; ++layer_index)
-        {
-            if (strcmp(requested_layer, layers[layer_index].layerName) == 0)
-            {
-                layer_found = VK_TRUE;
-                break;
-            }
-        }
+    size_t instance_layer_count = sizeof(instance_layers) / sizeof(instance_layers[0]);
+    instance_creation_information.enabledLayerCount = instance_layer_count;
+    instance_creation_information.ppEnabledLayerNames = instance_layers;
 
-        if (layer_found == VK_FALSE)
-        {
-            fprintf(stderr, "ERROR: Layer '%s' requested, but not found\n", requested_layer);
-            graphics_backend_destroy(graphics_backend);
-            free(layers);
-            return NULL;
-        }
-    }
-
-    // The layers can be freed after looking through the layers to make sure the requested layers are present
-    free(layers);
-
-    instance_creation_information.enabledLayerCount = requested_layers_count;
-    instance_creation_information.ppEnabledLayerNames = requested_layers;
-
-    uint32_t sdl_extension_count = 0;
-    const char *const *sdl_extensions = SDL_Vulkan_GetInstanceExtensions(&sdl_extension_count);
-    if (sdl_extensions == NULL)
+    uint32_t sdl_instance_extension_count = 0;
+    const char *const *sdl_instance_extensions = SDL_Vulkan_GetInstanceExtensions(&sdl_instance_extension_count);
+    if (sdl_instance_extensions == NULL)
     {
         fprintf(stderr, "ERROR: Failed to query SDL Vulkan instance extensions: %s\n", SDL_GetError());
         graphics_backend_destroy(graphics_backend);
@@ -136,40 +86,45 @@ GraphicsBackend *graphics_backend_create()
 
     // VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME - Enabled to be able to run Vulkan on a macOS via MoltenVK
     // VK_EXT_DEBUG_UTILS_EXTENSION_NAME - Enabled to be able to setup a debug messenger with the instance
-    const char *required_extensions[] =
+    const char *additional_instance_extensions[] =
     {
         VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME,
         VK_EXT_DEBUG_UTILS_EXTENSION_NAME
     };
 
-    size_t required_extension_count = sizeof(required_extensions) / sizeof(required_extensions[0]);
-    
-    uint32_t extension_count = sdl_extension_count + required_extension_count;
-    const char **extensions = malloc(extension_count * sizeof(const char *));
-    if (extensions == NULL)
+    size_t additional_instance_extension_count =
+    (
+        sizeof(additional_instance_extensions) / sizeof(additional_instance_extensions[0])
+    );
+
+    size_t instance_extension_count = sdl_instance_extension_count + additional_instance_extension_count;
+    const char **instance_extensions = malloc(instance_extension_count * sizeof(const char *));
+    if (instance_extensions == NULL)
     {
         fprintf(stderr, "ERROR: Failed to allocate memory for extensions\n");
         graphics_backend_destroy(graphics_backend);
         return NULL;
     }
 
-    for (uint32_t extension_index = 0; extension_index < sdl_extension_count; ++extension_index)
-    {
-        extensions[extension_index] = sdl_extensions[extension_index];
-    }
+    memcpy
+    (
+        instance_extensions, sdl_instance_extensions, sdl_instance_extension_count * sizeof(const char *)
+    );
+    
+    memcpy
+    (
+        instance_extensions + sdl_instance_extension_count, additional_instance_extensions,
+        additional_instance_extension_count * sizeof(const char *)
+    );
 
-    for (uint32_t extension_index = 0; extension_index < required_extension_count; ++extension_index)
-    {
-        extensions[sdl_extension_count + extension_index] = required_extensions[extension_index];
-    }
-
-    instance_creation_information.enabledExtensionCount = extension_count;
-    instance_creation_information.ppEnabledExtensionNames = extensions;
+    instance_creation_information.enabledExtensionCount = instance_extension_count;
+    instance_creation_information.ppEnabledExtensionNames = instance_extensions;
 
     result = vkCreateInstance(&instance_creation_information, NULL, &graphics_backend->vulkan_instance);
 
-    // The extensions can be freed after creating the Vulkan instance, independent of the instance creation result
-    free(extensions);
+    // The instance extensions can be freed after creating the Vulkan instance, independent of the Vulkan instance
+    // creation result
+    free(instance_extensions);
 
     if (result != VK_SUCCESS)
     {
@@ -419,117 +374,33 @@ GraphicsBackend *graphics_backend_create()
     device_creation_information.pQueueCreateInfos = queue_creation_informations;
     device_creation_information.queueCreateInfoCount = queue_creation_information_count;
 
-    uint32_t logical_device_extension_count = 0;
-    result = vkEnumerateDeviceExtensionProperties
-    (
-        graphics_backend->physical_device, NULL, &logical_device_extension_count, NULL
-    );
-
-    if (result != VK_SUCCESS)
-    {
-        fprintf(stderr, "ERROR: Failed to query logical device extension count: %s\n", string_VkResult(result));
-        graphics_backend_destroy(graphics_backend);
-        return NULL;
-    }
-
-    VkExtensionProperties *logical_device_extensions = malloc
-    (
-        logical_device_extension_count * sizeof(VkExtensionProperties)
-    );
-
-    if (logical_device_extensions == NULL)
-    {
-        fprintf(stderr, "ERROR: Failed to allocate memory for logical device extensions\n");
-        graphics_backend_destroy(graphics_backend);
-        return NULL;
-    }
-
-    result = vkEnumerateDeviceExtensionProperties
-    (
-        graphics_backend->physical_device, NULL, &logical_device_extension_count, logical_device_extensions
-    );
-  
-    if (result != VK_SUCCESS)
-    {
-        fprintf(stderr, "ERROR: Failed to query logical device extensions: %s\n", string_VkResult(result));
-        graphics_backend_destroy(graphics_backend);
-        free(logical_device_extensions);
-        return NULL;
-    }
-
-    // TODO: Enable the following logical device extensions for ray tracing or path tracing
+    // TODO: Enable the following logical device extensions for ray tracing or path tracing:
     // VK_KHR_acceleration_structure, VK_KHR_ray_tracing_pipeline, VK_KHR_deferred_host_operations
     
     // VK_KHR_SWAPCHAIN_EXTENSION_NAME - Enabled to be able present on a window surface
     // VK_KHR_portability_subset - Enabled to be able to run Vulkan on a macOS via MoltenVK
-    const char *enabled_logical_device_extensions[] =
+    const char *logical_device_extensions[] =
     {
         VK_KHR_SWAPCHAIN_EXTENSION_NAME,
         "VK_KHR_portability_subset"
     };
 
-    uint32_t enabled_logical_device_extension_count =
-    (
-        sizeof(enabled_logical_device_extensions) / sizeof(enabled_logical_device_extensions[0])
-    );
+    size_t logical_device_extension_count = sizeof(logical_device_extensions) / sizeof(logical_device_extensions[0]);
 
-    for
-    (
-        uint32_t enabled_logical_device_extension_index = 0;
-        enabled_logical_device_extension_index < enabled_logical_device_extension_count;
-        ++enabled_logical_device_extension_index
-    )
-    {
-        VkBool32 logical_device_extension_found = VK_FALSE;
-        const char *enabled_logical_device_extension_name =
-        (
-            enabled_logical_device_extensions[enabled_logical_device_extension_index]
-        );
+    device_creation_information.enabledExtensionCount = logical_device_extension_count;
+    device_creation_information.ppEnabledExtensionNames = logical_device_extensions;
 
-        for
-        (
-            uint32_t logical_device_extension_index = 0;
-            logical_device_extension_index < logical_device_extension_count;
-            ++logical_device_extension_index
-        )
-        {
-            const char *logical_device_extension_name =
-            (
-                logical_device_extensions[logical_device_extension_index].extensionName
-            );
-
-            if (strcmp(enabled_logical_device_extension_name, logical_device_extension_name) == 0)
-            {
-                logical_device_extension_found = VK_TRUE;
-                break;
-            }
-        }
-
-        if (logical_device_extension_found == VK_FALSE)
-        {
-            fprintf
-            (
-                stderr, "ERROR: Logical device extension '%s' requested, but not found\n",
-                enabled_logical_device_extension_name
-            );
-
-            graphics_backend_destroy(graphics_backend);
-            free(logical_device_extensions);
-            return NULL;
-        }
-    }
-    
-    free(logical_device_extensions);
-    device_creation_information.enabledExtensionCount = enabled_logical_device_extension_count;
-    device_creation_information.ppEnabledExtensionNames = enabled_logical_device_extensions;
-
-    const char *logical_device_validation_layers[] =
+    // VK_LAYER_KHRONOS_validation - Enabled for reporting error messages about potential API misuse and, performance
+    // issues, or invalid synchronization
+    const char *logical_device_layers[] =
     {
         "VK_LAYER_KHRONOS_validation"
     };
 
-    device_creation_information.enabledLayerCount = 1;
-    device_creation_information.ppEnabledLayerNames = logical_device_validation_layers;
+    size_t logical_device_layer_count = sizeof(logical_device_layers) / sizeof(logical_device_layers[0]);
+
+    device_creation_information.enabledLayerCount = logical_device_layer_count;
+    device_creation_information.ppEnabledLayerNames = logical_device_layers;
 
     result = vkCreateDevice
     (
