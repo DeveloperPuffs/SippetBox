@@ -31,7 +31,9 @@ typedef struct Window
 {
     Context *context;
     SDL_Window *sdl_window_handle;
+    VkExtent2D window_extent;
     VkSurfaceKHR surface;
+    VkSurfaceFormatKHR surface_format;
     VkSwapchainKHR swapchain;
     VkImage *images;
     VkImageView *image_views;
@@ -777,6 +779,8 @@ static inline uint32_t rate_physical_device_extensions(VkPhysicalDevice physical
 
 Window *window_create(const char *title, int initial_width, int initial_height, Context *context)
 {
+    VkResult result;
+
     if (context == NULL)
     {
         log_error("Cannot create 'Window' if given 'Context' is 'NULL'");
@@ -791,6 +795,13 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
     }
 
     window->context = context;
+    VkInstance vulkan_instance = context->vulkan_instance;
+    VkPhysicalDevice physical_device = context->physical_device;
+    VkDevice logical_device = context->logical_device;
+
+    /*****************************************************************************************************************/
+    // SDL Window Creation
+    /*****************************************************************************************************************/
 
     window->sdl_window_handle = SDL_CreateWindow(title, initial_width, initial_height, SDL_WINDOW_VULKAN);
     if (window->sdl_window_handle == NULL)
@@ -800,9 +811,139 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
         return NULL;
     }
 
-    if (SDL_Vulkan_CreateSurface(window->sdl_window_handle, context->vulkan_instance, NULL, &window->surface) == false)
+    /*****************************************************************************************************************/
+    // Fetching Window Extent
+    /*****************************************************************************************************************/
+
+    int window_width;
+    int window_height;
+    if (SDL_GetWindowSizeInPixels(window->sdl_window_handle, &window_width, &window_height) == false)
+    {
+        log_error("Failed to query SDL window size in pixels: %s", SDL_GetError());
+        window_destroy(window);
+        return NULL;
+    }
+
+    window->window_extent.width = (uint32_t)window_width;
+    window->window_extent.height = (uint32_t)window_height;
+
+    /*****************************************************************************************************************/
+    // Window Surface Creation
+    /*****************************************************************************************************************/
+
+    if (SDL_Vulkan_CreateSurface(window->sdl_window_handle, vulkan_instance, NULL, &window->surface) == false)
     {
         log_error("Failed to create window surface: %s", SDL_GetError());
+        window_destroy(window);
+        return NULL;
+    }
+
+    /*****************************************************************************************************************/
+    // Surface Format Selection
+    /*****************************************************************************************************************/
+
+    uint32_t surface_format_count;
+    result = vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device, window->surface, &surface_format_count, NULL);
+    if (result != VK_SUCCESS)
+    {
+        log_error("Failed to query surface format count: %s", string_VkResult(result));
+        window_destroy(window);
+        return NULL;
+    }
+
+    if (surface_format_count == 0)
+    {
+        log_error("No surface format found");
+        window_destroy(window);
+        return NULL;
+    }
+
+    VkSurfaceFormatKHR *surface_formats =
+    (
+        (VkSurfaceFormatKHR *)malloc(surface_format_count * sizeof(VkSurfaceFormatKHR))
+    );
+
+    if (surface_formats == NULL)
+    {
+        log_error("Failed to allocate memory for surface formats");
+        window_destroy(window);
+        return NULL;
+    }
+
+    result = vkGetPhysicalDeviceSurfaceFormatsKHR
+    (
+        physical_device, window->surface, &surface_format_count, surface_formats
+    );
+
+    if (result != VK_SUCCESS)
+    {
+        log_error("Failed to query surface formats: %s", string_VkResult(result));
+        window_destroy(window);
+        free(surface_formats);
+        return NULL;
+    }
+
+    uint32_t chosen_surface_format_index = UINT32_MAX;
+    for (uint32_t surface_format_index = 0; surface_format_index < surface_format_count; ++surface_format_index)
+    {
+        VkSurfaceFormatKHR surface_format = surface_formats[surface_format_index];
+        
+        if
+        (
+            surface_format.format == VK_FORMAT_B8G8R8A8_SRGB &&
+            surface_format.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR
+        )
+        {
+            chosen_surface_format_index = surface_format_index;
+            break;
+        }
+    }
+
+    if (chosen_surface_format_index == UINT32_MAX)
+    {
+        log_error("Failed to find suitable surface format");
+        window_destroy(window);
+        free(surface_formats);
+        return NULL;
+    }
+
+    window->surface_format = surface_formats[chosen_surface_format_index];
+    free(surface_formats);
+
+    /*****************************************************************************************************************/
+    // Swapchain creation
+    /*****************************************************************************************************************/
+
+    VkSwapchainCreateInfoKHR swapchain_creation_information = {};
+    swapchain_creation_information.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+    swapchain_creation_information.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    swapchain_creation_information.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+    swapchain_creation_information.presentMode = VK_PRESENT_MODE_FIFO_KHR;
+    swapchain_creation_information.imageArrayLayers = 1;
+    swapchain_creation_information.clipped = VK_TRUE;
+    swapchain_creation_information.oldSwapchain = VK_NULL_HANDLE;
+    swapchain_creation_information.surface = window->surface;
+    swapchain_creation_information.imageFormat = window->surface_format.format;
+    swapchain_creation_information.imageColorSpace = window->surface_format.colorSpace;
+    swapchain_creation_information.imageExtent = window->window_extent;
+
+    VkSurfaceCapabilitiesKHR surface_capabilities;
+    result = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_device, window->surface, &surface_capabilities);
+    if (result != VK_SUCCESS)
+    {
+        log_error("Failed to query physical device surface capabilities: %s", string_VkResult(result));
+        window_destroy(window);
+        return NULL;
+    }
+
+    swapchain_creation_information.minImageCount = surface_capabilities.minImageCount;
+    swapchain_creation_information.preTransform = surface_capabilities.currentTransform;
+
+    VkSwapchainKHR swapchain;
+    result = vkCreateSwapchainKHR(logical_device, &swapchain_creation_information, NULL, &swapchain);
+    if (result != VK_SUCCESS)
+    {
+        log_error("Failed to create swapchain: %s", string_VkResult(result));
         window_destroy(window);
         return NULL;
     }
@@ -821,6 +962,13 @@ void window_destroy(Window *window)
         return;
     }
 
+    VkInstance vulkan_instance = window->context->vulkan_instance;
+    VkDevice logical_device = window->context->logical_device;
+
+    vkDeviceWaitIdle(logical_device);
+
+    vkDestroySwapchainKHR(logical_device, window->swapchain, NULL);
+    SDL_Vulkan_DestroySurface(vulkan_instance, window->surface, NULL);
     SDL_DestroyWindow(window->sdl_window_handle);
     free(window);
 }

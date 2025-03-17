@@ -18,8 +18,8 @@ void context_destroy(Context *graphics_backend);
 
 /**
  * Stores resources used by a window for creating an environment that can be renderered on. Contains an SDL window
- * handle, a window surface, a swapchain, swapchain images, image views, framebuffers, and synchronization objects for
- * rendering multiple frames.
+ * handle, a window extent, a window surface, a surface format, a swapchain, swapchain images, image views,
+ * framebuffers, and synchronization objects for rendering multiple frames.
  */
 typedef struct Window Window;
 

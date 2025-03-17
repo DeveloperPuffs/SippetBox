@@ -56,6 +56,8 @@ int main()
         terminate(&state, EXIT_FAILURE);
     }
 
+    log_debug("Starting program loop ...");
+
     // This will keep waiting for the `update()` function to return `false`
     while (update(&state) == true);
 
