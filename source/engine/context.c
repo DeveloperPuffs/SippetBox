@@ -6,9 +6,9 @@
 #include <vulkan/vulkan.h>
 #include <vulkan/vk_enum_string_helper.h>
 
-#include <engine/graphics.h>
+#include <engine/context.h>
 
-typedef struct GraphicsBackend
+typedef struct Context
 {
     VkInstance vulkan_instance;
     VkDebugUtilsMessengerEXT debug_messenger;
@@ -18,7 +18,7 @@ typedef struct GraphicsBackend
     VkDevice logical_device;
     VkQueue graphics_queue;
     VkQueue present_queue;
-} GraphicsBackend;
+} Context;
 
 static inline VkBool32 vulkan_debug_messenger_callback
 (
@@ -33,17 +33,17 @@ static inline uint32_t rate_physical_device_queue_families(VkPhysicalDevice phys
 static inline uint32_t rate_physical_device_extensions(VkPhysicalDevice physical_device);
 
 /*********************************************************************************************************************/
-// Graphics Backend Creation Function
+// Context Creation Function
 /*********************************************************************************************************************/
 
-GraphicsBackend *graphics_backend_create()
+Context *context_create()
 {
     VkResult result;
     
-    GraphicsBackend *graphics_backend = (GraphicsBackend *)calloc(1, sizeof(GraphicsBackend));
-    if (graphics_backend == NULL)
+    Context *context = (Context *)calloc(1, sizeof(Context));
+    if (context == NULL)
     {
-        fprintf(stderr, "ERROR: Failed to allocate memory for graphics backend instance\n");
+        fprintf(stderr, "ERROR: Failed to allocate memory for context instance\n");
         return NULL;
     }
 
@@ -82,7 +82,7 @@ GraphicsBackend *graphics_backend_create()
     if (sdl_instance_extensions == NULL)
     {
         fprintf(stderr, "ERROR: Failed to query SDL Vulkan instance extensions: %s\n", SDL_GetError());
-        graphics_backend_destroy(graphics_backend);
+        context_destroy(context);
         return NULL;
     }
 
@@ -109,7 +109,7 @@ GraphicsBackend *graphics_backend_create()
     if (instance_extensions == NULL)
     {
         fprintf(stderr, "ERROR: Failed to allocate memory for extensions\n");
-        graphics_backend_destroy(graphics_backend);
+        context_destroy(context);
         return NULL;
     }
 
@@ -127,7 +127,7 @@ GraphicsBackend *graphics_backend_create()
     instance_creation_information.enabledExtensionCount = instance_extension_count;
     instance_creation_information.ppEnabledExtensionNames = instance_extensions;
 
-    result = vkCreateInstance(&instance_creation_information, NULL, &graphics_backend->vulkan_instance);
+    result = vkCreateInstance(&instance_creation_information, NULL, &context->vulkan_instance);
 
     // The instance extensions can be freed after creating the Vulkan instance, independent of the Vulkan instance
     // creation result
@@ -136,7 +136,7 @@ GraphicsBackend *graphics_backend_create()
     if (result != VK_SUCCESS)
     {
         fprintf(stderr, "ERROR: Failed to create Vulkan instance: %s\n", string_VkResult(result));
-        graphics_backend_destroy(graphics_backend);
+        context_destroy(context);
         return NULL;
     }
 
@@ -167,26 +167,25 @@ GraphicsBackend *graphics_backend_create()
     PFN_vkCreateDebugUtilsMessengerEXT debug_messenger_creation_function =
     (
         (PFN_vkCreateDebugUtilsMessengerEXT)
-        vkGetInstanceProcAddr(graphics_backend->vulkan_instance, "vkCreateDebugUtilsMessengerEXT")
+        vkGetInstanceProcAddr(context->vulkan_instance, "vkCreateDebugUtilsMessengerEXT")
     );
 
     if (debug_messenger_creation_function == NULL)
     {
         fprintf(stderr, "ERROR: Failed to query debug messenger creation function\n");
-        graphics_backend_destroy(graphics_backend);
+        context_destroy(context);
         return NULL;
     }
 
     result = debug_messenger_creation_function
     (
-        graphics_backend->vulkan_instance, &debug_messenger_creation_information, NULL,
-        &graphics_backend->debug_messenger
+        context->vulkan_instance, &debug_messenger_creation_information, NULL, &context->debug_messenger
     );
 
     if (result != VK_SUCCESS)
     {
         fprintf(stderr, "ERROR: Failed to create debug messenger: %s\n", string_VkResult(result));
-        graphics_backend_destroy(graphics_backend);
+        context_destroy(context);
         return NULL;
     }
 
@@ -195,18 +194,18 @@ GraphicsBackend *graphics_backend_create()
     /*****************************************************************************************************************/
 
     uint32_t physical_device_count;
-    result = vkEnumeratePhysicalDevices(graphics_backend->vulkan_instance, &physical_device_count, NULL);
+    result = vkEnumeratePhysicalDevices(context->vulkan_instance, &physical_device_count, NULL);
     if (result != VK_SUCCESS)
     {
         fprintf(stderr, "ERROR: Failed to query physical device count: %s\n", string_VkResult(result));
-        graphics_backend_destroy(graphics_backend);
+        context_destroy(context);
         return NULL;
     }
 
     if (physical_device_count == 0)
     {
         fprintf(stderr, "ERROR: No physical device found\n");
-        graphics_backend_destroy(graphics_backend);
+        context_destroy(context);
         return NULL;
     }
 
@@ -214,15 +213,15 @@ GraphicsBackend *graphics_backend_create()
     if (physical_devices == NULL)
     {
         fprintf(stderr, "ERROR: Failed to allocate memory for physical devices\n");
-        graphics_backend_destroy(graphics_backend);
+        context_destroy(context);
         return NULL;
     }
 
-    result = vkEnumeratePhysicalDevices(graphics_backend->vulkan_instance, &physical_device_count, physical_devices);
+    result = vkEnumeratePhysicalDevices(context->vulkan_instance, &physical_device_count, physical_devices);
     if (result != VK_SUCCESS)
     {
         fprintf(stderr, "ERROR: Failed to query physical devices: %s\n", string_VkResult(result));
-        graphics_backend_destroy(graphics_backend);
+        context_destroy(context);
         return NULL;
     }
 
@@ -241,7 +240,7 @@ GraphicsBackend *graphics_backend_create()
 
         if (score > best_score)
         {
-            graphics_backend->physical_device = physical_device;
+            context->physical_device = physical_device;
             best_score = score;
         }
     }
@@ -250,7 +249,7 @@ GraphicsBackend *graphics_backend_create()
     if (best_score == 0)
     {
         fprintf(stderr, "ERROR: Failed to find suitable physical device\n");
-        graphics_backend_destroy(graphics_backend);
+        context_destroy(context);
         return NULL;
     }
 
@@ -261,17 +260,17 @@ GraphicsBackend *graphics_backend_create()
     /*****************************************************************************************************************/
 
     uint32_t queue_family_count = 0;
-    vkGetPhysicalDeviceQueueFamilyProperties(graphics_backend->physical_device, &queue_family_count, NULL);
+    vkGetPhysicalDeviceQueueFamilyProperties(context->physical_device, &queue_family_count, NULL);
 
     VkQueueFamilyProperties *queue_families = malloc(queue_family_count * sizeof(VkQueueFamilyProperties));
     if (queue_families == NULL)
     {
         fprintf(stdout, "ERROR: Failed to allocate memory for queue families\n");
-        graphics_backend_destroy(graphics_backend);
+        context_destroy(context);
         return NULL;
     }
 
-    vkGetPhysicalDeviceQueueFamilyProperties(graphics_backend->physical_device, &queue_family_count, queue_families);
+    vkGetPhysicalDeviceQueueFamilyProperties(context->physical_device, &queue_family_count, queue_families);
 
     // A window and a window surface have to be created to ensure that the present queue family supports presenting to
     // a window surface created in this context
@@ -279,16 +278,16 @@ GraphicsBackend *graphics_backend_create()
     if (window_model == NULL)
     {
         fprintf(stderr, "ERROR: Failed to create window model: %s\n", SDL_GetError());
-        graphics_backend_destroy(graphics_backend);
+        context_destroy(context);
         free(queue_families);
         return NULL;
     }
 
     VkSurfaceKHR surface_model;
-    if (SDL_Vulkan_CreateSurface(window_model, graphics_backend->vulkan_instance, NULL, &surface_model) == false)
+    if (SDL_Vulkan_CreateSurface(window_model, context->vulkan_instance, NULL, &surface_model) == false)
     {
         fprintf(stderr, "ERROR: Failed to create surface model: %s\n", SDL_GetError());
-        graphics_backend_destroy(graphics_backend);
+        context_destroy(context);
         SDL_DestroyWindow(window_model);
         free(queue_families);
         return NULL;
@@ -309,7 +308,7 @@ GraphicsBackend *graphics_backend_create()
         VkBool32 supports_presenting = VK_FALSE;
         result = vkGetPhysicalDeviceSurfaceSupportKHR
         (
-            graphics_backend->physical_device, queue_family_index, surface_model, &supports_presenting
+            context->physical_device, queue_family_index, surface_model, &supports_presenting
         );
 
         if (result != VK_SUCCESS)
@@ -330,14 +329,14 @@ GraphicsBackend *graphics_backend_create()
         }
     }
 
-    vkDestroySurfaceKHR(graphics_backend->vulkan_instance, surface_model, NULL);
+    vkDestroySurfaceKHR(context->vulkan_instance, surface_model, NULL);
     SDL_DestroyWindow(window_model);
     free(queue_families);
 
     if (graphics_queue_family_index == UINT32_MAX || present_queue_family_index == UINT32_MAX)
     {
         fprintf(stderr, "ERROR: Failed to find suitable queue family indices\n");
-        graphics_backend_destroy(graphics_backend);
+        context_destroy(context);
         return NULL;
     }
 
@@ -419,13 +418,13 @@ GraphicsBackend *graphics_backend_create()
 
     result = vkCreateDevice
     (
-        graphics_backend->physical_device, &device_creation_information, NULL, &graphics_backend->logical_device
+        context->physical_device, &device_creation_information, NULL, &context->logical_device
     );
 
     if (result != VK_SUCCESS)
     {
         fprintf(stderr, "ERROR: Failed to create logical device: %s\n", string_VkResult(result));
-        graphics_backend_destroy(graphics_backend);
+        context_destroy(context);
         return NULL;
     }
 
@@ -435,43 +434,43 @@ GraphicsBackend *graphics_backend_create()
 
     vkGetDeviceQueue
     (
-        graphics_backend->logical_device, graphics_backend->graphics_queue_family_index, 0, &graphics_backend->graphics_queue
+        context->logical_device, context->graphics_queue_family_index, 0, &context->graphics_queue
     );
 
     vkGetDeviceQueue
     (
-        graphics_backend->logical_device, graphics_backend->present_queue_family_index, 0, &graphics_backend->present_queue
+        context->logical_device, context->present_queue_family_index, 0, &context->present_queue
     );
 
-    return graphics_backend;
+    return context;
 }
 
 /*********************************************************************************************************************/
-// Graphics Backend Destruction Function
+// Context Destruction Function
 /*********************************************************************************************************************/
 
-void graphics_backend_destroy(GraphicsBackend *graphics_backend)
+void context_destroy(Context *context)
 {
-    if (graphics_backend == NULL)
+    if (context == NULL)
     {
         return;
     }
 
-    vkDestroyDevice(graphics_backend->logical_device, NULL);
+    vkDestroyDevice(context->logical_device, NULL);
 
-    if (graphics_backend->vulkan_instance != NULL)
+    if (context->vulkan_instance != NULL)
     {
         PFN_vkDestroyDebugUtilsMessengerEXT debug_messenger_destruction_function =
         (
             (PFN_vkDestroyDebugUtilsMessengerEXT)
-            vkGetInstanceProcAddr(graphics_backend->vulkan_instance, "vkDestroyDebugUtilsMessengerEXT")
+            vkGetInstanceProcAddr(context->vulkan_instance, "vkDestroyDebugUtilsMessengerEXT")
         );
 
         if (debug_messenger_destruction_function)
         {
             debug_messenger_destruction_function
             (
-                graphics_backend->vulkan_instance, graphics_backend->debug_messenger, NULL
+                context->vulkan_instance, context->debug_messenger, NULL
             );
         }
         else
@@ -480,8 +479,8 @@ void graphics_backend_destroy(GraphicsBackend *graphics_backend)
         }
     }
 
-    vkDestroyInstance(graphics_backend->vulkan_instance, NULL);
-    free(graphics_backend);
+    vkDestroyInstance(context->vulkan_instance, NULL);
+    free(context);
 }
 
 /*********************************************************************************************************************/

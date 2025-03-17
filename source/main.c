@@ -4,13 +4,13 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
 
-#include <engine/graphics.h>
+#include <engine/context.h>
 #include <engine/window.h>
 
 typedef struct
 {
-   GraphicsBackend *graphics_backend;
-   Window *window;
+    Context *context;
+    Window *window;
 } State;
 
 static bool update(State *state);
@@ -19,7 +19,7 @@ static void terminate(State *state, int exit_code);
 int main()
 {
     State state = {};
-    state.graphics_backend = NULL;
+    state.context = NULL;
     state.window = NULL;
 
     if (SDL_Init(SDL_INIT_VIDEO) == false)
@@ -34,8 +34,8 @@ int main()
         terminate(&state, EXIT_FAILURE);
     }
 
-    state.graphics_backend = graphics_backend_create();
-    if (state.graphics_backend == NULL)
+    state.context = context_create();
+    if (state.context == NULL)
     {
         fprintf(stderr, "ERROR: Failed to create graphics backend instance\n");
         terminate(&state, EXIT_FAILURE);
@@ -71,7 +71,7 @@ static bool update(State *state)
 static void terminate(State *state, int exit_code)
 {
     window_destroy(state->window);
-    graphics_backend_destroy(state->graphics_backend);
+    context_destroy(state->context);
     SDL_Vulkan_UnloadLibrary();
     SDL_Quit();
     
