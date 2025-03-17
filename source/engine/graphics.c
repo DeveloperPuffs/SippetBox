@@ -98,6 +98,9 @@ Context *context_create()
     application_information.apiVersion = VK_API_VERSION_1_0;
     instance_creation_information.pApplicationInfo = &application_information;
 
+#ifdef NDEBUG
+    const char *instance_layers[] = {};
+#else
     /*
         "VK_LAYER_KHRONOS_validation"
         For reporting error messages about potential API misuse and, performance issues, or invalid synchronization
@@ -106,6 +109,7 @@ Context *context_create()
     {
         "VK_LAYER_KHRONOS_validation"
     };
+#endif
 
     size_t instance_layer_count = sizeof(instance_layers) / sizeof(instance_layers[0]);
     instance_creation_information.enabledLayerCount = instance_layer_count;
@@ -426,6 +430,9 @@ Context *context_create()
     device_creation_information.pQueueCreateInfos = queue_creation_informations;
     device_creation_information.queueCreateInfoCount = queue_creation_information_count;
 
+#ifdef NDEBUG
+    const char *logical_device_layers[] = {};
+#else
     /*
         "VK_LAYER_KHRONOS_validation"
         For reporting error messages about potential API misuse and, performance issues, or invalid synchronization
@@ -434,6 +441,7 @@ Context *context_create()
     {
         "VK_LAYER_KHRONOS_validation"
     };
+#endif
 
     size_t logical_device_layer_count = sizeof(logical_device_layers) / sizeof(logical_device_layers[0]);
 
