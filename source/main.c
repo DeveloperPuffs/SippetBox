@@ -19,8 +19,8 @@ static void terminate(State *state, int exit_code);
 int main()
 {
     State state = {};
-    state.window = NULL;
     state.graphics_backend = NULL;
+    state.window = NULL;
 
     if (SDL_Init(SDL_INIT_VIDEO) == false)
     {
