@@ -429,6 +429,20 @@ GraphicsBackend *graphics_backend_create()
         return NULL;
     }
 
+    /*****************************************************************************************************************/
+    // Fetching Graphics Queue and Present Queue
+    /*****************************************************************************************************************/
+
+    vkGetDeviceQueue
+    (
+        graphics_backend->logical_device, graphics_backend->graphics_queue_family_index, 0, &graphics_backend->graphics_queue
+    );
+
+    vkGetDeviceQueue
+    (
+        graphics_backend->logical_device, graphics_backend->present_queue_family_index, 0, &graphics_backend->present_queue
+    );
+
     return graphics_backend;
 }
 
