@@ -800,6 +800,13 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
         return NULL;
     }
 
+    if (SDL_Vulkan_CreateSurface(window->sdl_window_handle, context->vulkan_instance, NULL, &window->surface) == false)
+    {
+        log_error("Failed to create window surface: %s", SDL_GetError());
+        window_destroy(window);
+        return NULL;
+    }
+
     return window;
 }
 
