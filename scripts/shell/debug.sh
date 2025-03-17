@@ -1,4 +1,4 @@
-# This shell script will configure and build using CMake, and then run the project.
+# This shell script will configure and build using CMake with debug build type, and then run the project.
 
 ORIGINAL_DIRECTORY=$(pwd)
 cd "$(dirname "$0")/../.."
@@ -6,7 +6,7 @@ cd "$(dirname "$0")/../.."
 mkdir -p build
 cd build
 
-cmake ..
+cmake -DCMAKE_BUILD_TYPE=Debug ..
 cmake --build .
 
 cd "$ORIGINAL_DIRECTORY"
