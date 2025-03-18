@@ -984,6 +984,48 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
         return NULL;
     }
 
+    /*****************************************************************************************************************/
+    // Image Views Creation
+    /*****************************************************************************************************************/
+
+    window->image_views = (VkImageView *)malloc(window->image_count * sizeof(VkImageView));
+    if (window->image_views == NULL)
+    {
+        log_error("Failed to allocate memory for image views");
+        window_destroy(window);
+        return NULL;
+    }
+
+    for (uint32_t image_view_index = 0; image_view_index < window->image_count; ++image_view_index)
+    {
+        VkImageViewCreateInfo image_view_creation_information = {};
+        image_view_creation_information.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        image_view_creation_information.image = window->images[image_view_index];
+        image_view_creation_information.format = window->surface_format.format;
+        image_view_creation_information.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        image_view_creation_information.subresourceRange.baseMipLevel = 0;
+        image_view_creation_information.subresourceRange.levelCount = 1;
+        image_view_creation_information.subresourceRange.baseArrayLayer = 0;
+        image_view_creation_information.subresourceRange.layerCount = 1;
+        image_view_creation_information.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+        image_view_creation_information.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+        image_view_creation_information.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+        image_view_creation_information.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+        image_view_creation_information.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+
+        result = vkCreateImageView
+        (
+            logical_device, &image_view_creation_information, NULL, &window->image_views[image_view_index]
+        );
+
+        if (result != VK_SUCCESS)
+        {
+            log_error("Failed to create image view %d: %s", image_view_index, string_VkResult(result));
+            window_destroy(window);
+            return NULL;
+        }
+    }
+
     return window;
 }
 
@@ -1002,6 +1044,13 @@ void window_destroy(Window *window)
     VkDevice logical_device = window->context->logical_device;
 
     vkDeviceWaitIdle(logical_device);
+
+    for (uint32_t image_view_index = 0; image_view_index < window->image_count; ++image_view_index)
+    {
+        vkDestroyImageView(logical_device, window->image_views[image_view_index], NULL);
+    }
+
+    free(window->image_views);
 
     for (uint32_t image_index = 0; image_index < window->image_count; ++image_index)
     {
