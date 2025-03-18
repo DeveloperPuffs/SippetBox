@@ -44,10 +44,12 @@ typedef struct Window
     VkPipelineLayout pipeline_layout;
     VkPipeline pipeline;
     VkFramebuffer *framebuffers;
+    uint32_t maximum_frames_in_flight;
     VkCommandPool command_pool;
     VkCommandBuffer *command_buffers;
-    VkSemaphore *semaphores;
-    VkFence *fences;
+    VkSemaphore *image_available_semaphores;
+    VkSemaphore *render_finished_semaphores;
+    VkFence *in_flight_fences;
 } Window;
 
 /*********************************************************************************************************************/
@@ -964,7 +966,7 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
         return NULL;
     }
 
-    window->images = (VkImage *)malloc(window->image_count * sizeof(VkImage));
+    window->images = (VkImage *)calloc(window->image_count, sizeof(VkImage));
     if (window->images == NULL)
     {
         log_error("Failed to allocate memory for swapchain images");
@@ -984,7 +986,7 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
     // Image Views Creation
     /*****************************************************************************************************************/
 
-    window->image_views = (VkImageView *)malloc(window->image_count * sizeof(VkImageView));
+    window->image_views = (VkImageView *)calloc(window->image_count, sizeof(VkImageView));
     if (window->image_views == NULL)
     {
         log_error("Failed to allocate memory for image views");
@@ -1081,7 +1083,7 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
     };
 
     window->shader_module_count = sizeof(shader_file_paths) / sizeof(shader_file_paths[0]);
-    window->shader_modules = (VkShaderModule *)malloc(window->shader_module_count * sizeof(VkShaderModule));
+    window->shader_modules = (VkShaderModule *)calloc(window->shader_module_count, sizeof(VkShaderModule));
     for (size_t shader_module_index = 0; shader_module_index < window->shader_module_count; ++shader_module_index)
     {
         const char *shader_file_path = shader_file_paths[shader_module_index];
@@ -1307,7 +1309,7 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
     // Framebuffers Creation
     /*****************************************************************************************************************/
 
-    window->framebuffers = (VkFramebuffer *)malloc(window->image_count * sizeof(VkFramebuffer));
+    window->framebuffers = (VkFramebuffer *)calloc(window->image_count, sizeof(VkFramebuffer));
     if (window->framebuffers == NULL)
     {
         log_error("Failed to allocate memory for framebuffers");
@@ -1360,16 +1362,16 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
     // Command Buffers Creation
     /*****************************************************************************************************************/
 
-    // For now, create one command buffer
-    uint32_t command_buffer_count = 1;
+    // For now, set the maximum number of frames in flight to two
+    window->maximum_frames_in_flight = 2;
 
     VkCommandBufferAllocateInfo command_buffer_allocation_information = {};
     command_buffer_allocation_information.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
     command_buffer_allocation_information.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
     command_buffer_allocation_information.commandPool = window->command_pool;
-    command_buffer_allocation_information.commandBufferCount = command_buffer_count;
+    command_buffer_allocation_information.commandBufferCount = window->maximum_frames_in_flight;
 
-    window->command_buffers = malloc(command_buffer_count * sizeof(VkCommandBuffer));
+    window->command_buffers = (VkCommandBuffer *)calloc(window->maximum_frames_in_flight, sizeof(VkCommandBuffer));
     if (window->command_buffers == NULL)
     {
         log_error("Failed to allocate memory for command buffers");
@@ -1387,6 +1389,80 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
         log_error("Failed to create command buffers: %s", string_VkResult(result));
         window_destroy(window);
         return NULL;
+    }
+
+    /*****************************************************************************************************************/
+    // Synchronization Objects Creation
+    /*****************************************************************************************************************/
+
+    window->image_available_semaphores = (VkSemaphore *)calloc(window->maximum_frames_in_flight, sizeof(VkSemaphore));
+    if (window->image_available_semaphores == NULL)
+    {
+        log_error("Failed to allocate memory for image available semaphores");
+        window_destroy(window);
+        return NULL;
+    }
+
+    window->render_finished_semaphores = (VkSemaphore *)calloc(window->maximum_frames_in_flight, sizeof(VkSemaphore));
+    if (window->render_finished_semaphores == NULL)
+    {
+        log_error("Failed to allocate memory for render finished semaphores");
+        window_destroy(window);
+        return NULL;
+    }
+
+    window->in_flight_fences = (VkFence *)calloc(window->maximum_frames_in_flight, sizeof(VkFence));
+    if (window->in_flight_fences == NULL)
+    {
+        log_error("Failed to allocate memory for in flight fences");
+        window_destroy(window);
+        return NULL;
+    }
+
+    VkSemaphoreCreateInfo semaphore_creation_information = {};
+    semaphore_creation_information.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+    VkFenceCreateInfo fence_creation_information = {};
+    fence_creation_information.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    fence_creation_information.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+   
+    for (uint32_t frame_index = 0; frame_index < window->maximum_frames_in_flight; ++frame_index)
+    {
+        result = vkCreateSemaphore
+        (
+            logical_device, &semaphore_creation_information, NULL, &window->image_available_semaphores[frame_index]
+        );
+
+        if (result != VK_SUCCESS)
+        {
+            log_error("Failed to create image available semaphore #%d: %s", frame_index, string_VkResult(result));
+            window_destroy(window);
+            return NULL;
+        }
+
+        result = vkCreateSemaphore
+        (
+            logical_device, &semaphore_creation_information, NULL, &window->render_finished_semaphores[frame_index]
+        );
+
+        if (result != VK_SUCCESS)
+        {
+            log_error("Failed to create render finished semaphore #%d: %s", frame_index, string_VkResult(result));
+            window_destroy(window);
+            return NULL;
+        }
+
+        result = vkCreateFence
+        (
+            logical_device, &fence_creation_information, NULL, &window->in_flight_fences[frame_index]
+        );
+
+        if (result != VK_SUCCESS)
+        {
+            log_error("Failed to create in flight fence #%d: %s", frame_index, string_VkResult(result));
+            window_destroy(window);
+            return NULL;
+        }
     }
 
     return window;
@@ -1407,6 +1483,17 @@ void window_destroy(Window *window)
     VkDevice logical_device = window->context->logical_device;
 
     vkDeviceWaitIdle(logical_device);
+
+    for (uint32_t frame_index = 0; frame_index < window->maximum_frames_in_flight; ++frame_index)
+    {
+        vkDestroyFence(logical_device, window->in_flight_fences[frame_index], NULL);
+        vkDestroySemaphore(logical_device, window->render_finished_semaphores[frame_index], NULL);
+        vkDestroySemaphore(logical_device, window->image_available_semaphores[frame_index], NULL);
+    }
+
+    free(window->in_flight_fences);
+    free(window->render_finished_semaphores);
+    free(window->image_available_semaphores);
 
     vkDestroyCommandPool(logical_device, window->command_pool, NULL);
     free(window->command_buffers);
