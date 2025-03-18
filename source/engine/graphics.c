@@ -50,6 +50,7 @@ typedef struct Window
     VkSemaphore *image_available_semaphores;
     VkSemaphore *render_finished_semaphores;
     VkFence *in_flight_fences;
+    uint32_t current_frame_index;
 } Window;
 
 /*********************************************************************************************************************/
@@ -1466,6 +1467,136 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
     }
 
     return window;
+}
+
+/*********************************************************************************************************************/
+// Window Frame Rendering Function
+/*********************************************************************************************************************/
+
+int window_render_frame(Window *window, void (*callback)(void *user_data), void *user_data)
+{
+    VkResult result;
+
+    VkDevice logical_device = window->context->logical_device;
+
+    // Move to the next frame to get the corresponding command buffer, and synchronization objects
+    window->current_frame_index = (window->current_frame_index + 1) % window->maximum_frames_in_flight;
+
+    VkFence in_flight_fence = window->in_flight_fences[window->current_frame_index];
+    VkSemaphore image_available_semaphore = window->image_available_semaphores[window->current_frame_index];
+    VkSemaphore render_finished_semaphore = window->render_finished_semaphores[window->current_frame_index];
+    VkCommandBuffer command_buffer = window->command_buffers[window->current_frame_index];
+
+    result = vkWaitForFences(logical_device, 1, &in_flight_fence, VK_TRUE, UINT64_MAX);
+    if (result != VK_SUCCESS)
+    {
+        log_error("Failed to wait for in flight fence #%d: %s", window->current_frame_index, string_VkResult(result));
+        return 0;
+    }
+
+    result = vkResetFences(logical_device, 1, &in_flight_fence);
+    if (result != VK_SUCCESS)
+    {
+        log_error("Failed to reset in flight fence #%d: %s", window->current_frame_index, string_VkResult(result));
+        return 0;
+    }
+
+    uint32_t image_index;
+    result = vkAcquireNextImageKHR
+    (
+        logical_device, window->swapchain, UINT64_MAX, image_available_semaphore, VK_NULL_HANDLE, &image_index
+    );
+
+    if (result != VK_SUCCESS)
+    {
+        log_error("Failed to acquire next swapchain image: %s", string_VkResult(result));
+        return 0;
+    }
+
+    result = vkResetCommandBuffer(command_buffer, 0);
+    if (result != VK_SUCCESS)
+    {
+        log_error("Failed to reset command buffer #%d: %s", window->current_frame_index, string_VkResult(result));
+        return 0;
+    }
+
+    VkCommandBufferBeginInfo command_buffer_beginning_information = {};
+    command_buffer_beginning_information.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+
+    result = vkBeginCommandBuffer(command_buffer, &command_buffer_beginning_information);
+    if (result != VK_SUCCESS)
+    {
+        log_error("Failed to begin command buffer #%d: %s", window->current_frame_index, string_VkResult(result));
+        return 0;
+    }
+
+    VkRenderPassBeginInfo render_pass_beginning_information = {};
+    render_pass_beginning_information.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    render_pass_beginning_information.renderPass = window->render_pass;
+    render_pass_beginning_information.framebuffer = window->framebuffers[window->current_frame_index];
+    render_pass_beginning_information.renderArea.extent = window->window_extent;
+    render_pass_beginning_information.renderArea.offset.x = 0;
+    render_pass_beginning_information.renderArea.offset.y = 0;
+
+    VkClearValue clear_value = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
+    render_pass_beginning_information.pClearValues = &clear_value;
+    render_pass_beginning_information.clearValueCount = 1;
+
+    vkCmdBeginRenderPass(command_buffer, &render_pass_beginning_information, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, window->pipeline);
+
+    // Trigger the callback to let the user pass rendering commands
+    callback(user_data);
+
+    vkCmdEndRenderPass(command_buffer);
+
+    result = vkEndCommandBuffer(command_buffer);
+    if (result != VK_SUCCESS)
+    {
+        log_error("Failed to end command buffer #%d: %s", window->current_frame_index, string_VkResult(result));
+        return 0;
+    }
+
+    VkSubmitInfo submission_information = {};
+    submission_information.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submission_information.pCommandBuffers = &command_buffer;
+    submission_information.commandBufferCount = 1;
+    submission_information.pWaitSemaphores = &image_available_semaphore;
+    submission_information.waitSemaphoreCount = 1;
+    submission_information.pSignalSemaphores = &render_finished_semaphore;
+    submission_information.signalSemaphoreCount = 1;
+    
+    VkPipelineStageFlags wait_stages[] =
+    {
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
+    };
+
+    submission_information.pWaitDstStageMask = wait_stages;
+
+    result = vkQueueSubmit(window->context->graphics_queue, 1, &submission_information, in_flight_fence);
+    if (result != VK_SUCCESS)
+    {
+        log_error("Failed to submit command buffer #%d: %s", window->current_frame_index, string_VkResult(result));
+        return 0;
+    }
+
+    VkPresentInfoKHR presentation_information = {};
+    presentation_information.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+    presentation_information.pSwapchains = &window->swapchain;
+    presentation_information.swapchainCount = 1;
+    presentation_information.pImageIndices = &image_index;
+    presentation_information.pWaitSemaphores = &render_finished_semaphore;
+    presentation_information.waitSemaphoreCount = 1;
+    presentation_information.pResults = NULL;
+
+    result = vkQueuePresentKHR(window->context->present_queue, &presentation_information);
+    if (result != VK_SUCCESS)
+    {
+        log_error("Failed to present image: %s", window->current_frame_index, string_VkResult(result));
+        return 0;
+    }
+
+    return 1;
 }
 
 /*********************************************************************************************************************/

@@ -12,7 +12,7 @@ typedef struct
     Window *window;
 } State;
 
-static bool update(State *state);
+static int update(State *state);
 static void terminate(State *state, int exit_code);
 
 int main()
@@ -23,13 +23,13 @@ int main()
 
     if (SDL_Init(SDL_INIT_VIDEO) == false)
     {
-        log_error("Failed to initialize SDL");
+        log_error("Failed to initialize SDL: %s", SDL_GetError());
         terminate(&state, EXIT_FAILURE);
     }
 
     if (SDL_Vulkan_LoadLibrary(NULL) == false)
     {
-        log_error("Failed to load Vulkan Library with SDL");
+        log_error("Failed to load Vulkan Library with SDL: %s", SDL_GetError());
         terminate(&state, EXIT_FAILURE);
     }
 
@@ -50,23 +50,37 @@ int main()
     log_debug("Starting program loop ...");
 
     // This will keep waiting for the `update()` function to return `false`
-    while (update(&state) == true);
+    while (update(&state) == 1);
 
     terminate(&state, EXIT_SUCCESS);
 }
 
-static bool update(State *state)
+static void render(void *user_data);
+
+static int update(State *state)
 {
     SDL_Event event;
     while (SDL_PollEvent(&event) == true)
     {
         if (event.type == SDL_EVENT_QUIT)
         {
-            return false;
+            return 0;
         }
     }
 
-    return true;
+    if (window_render_frame(state->window, render, state) == 0)
+    {
+        log_error("Failed to render frame");
+        return 0;
+    }
+
+    return 1;
+}
+
+static void render(void *user_data)
+{
+    State *state = (State *)user_data;
+    return;
 }
 
 static void terminate(State *state, int exit_code)
