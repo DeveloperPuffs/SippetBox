@@ -39,6 +39,9 @@ typedef struct Window
     VkImage *images;
     VkImageView *image_views;
     VkRenderPass render_pass;
+    size_t shader_module_count;
+    VkShaderModule *shader_modules;
+    VkPipelineLayout pipeline_layout;
     VkPipeline pipeline;
     VkFramebuffer *framebuffers;
     VkCommandPool command_pool;
@@ -1077,74 +1080,69 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
         "resources/shaders/shader.frag.spv"
     };
 
-    size_t shader_count = sizeof(shader_file_paths) / sizeof(shader_file_paths[0]);
-
-    // If a specific shader module fails to create, this index is used to mark the index of that shader module, which
-    // will be used for looping over the created shader modules (up to this index) and destroying them
-    uint32_t shader_module_creation_failed_index = UINT32_MAX;
-
-    VkShaderModule *shader_modules = (VkShaderModule *)malloc(shader_count * sizeof(VkShaderModule));
-    for (size_t shader_index = 0; shader_index < shader_count; ++shader_index)
+    window->shader_module_count = sizeof(shader_file_paths) / sizeof(shader_file_paths[0]);
+    window->shader_modules = (VkShaderModule *)malloc(window->shader_module_count * sizeof(VkShaderModule));
+    for (size_t shader_module_index = 0; shader_module_index < window->shader_module_count; ++shader_module_index)
     {
-        const char *shader_file_path = shader_file_paths[shader_index];
+        const char *shader_file_path = shader_file_paths[shader_module_index];
 
         FILE *file = fopen(shader_file_path, "rb");
         if (file == NULL)
         {
             log_error("Failed to open shader file with path: %s", shader_file_path);
-            shader_module_creation_failed_index = shader_index;
-            break;
+            window_destroy(window);
+            return NULL;
         }
 
         if (fseek(file, 0, SEEK_END) != 0)
         {
-            log_error("Failed to seek to end of shader file with path: %s", shader_file_path);
-            shader_module_creation_failed_index = shader_index;
             fclose(file);
-            break;
+            log_error("Failed to seek to end of shader file with path: %s", shader_file_path);
+            window_destroy(window);
+            return NULL;
         }
 
         long size = ftell(file);
         if (size == -1L)
         {
-            log_error("Failed to determine shader file size with path: %s", shader_file_path);
-            shader_module_creation_failed_index = shader_index;
             fclose(file);
-            break;
+            log_error("Failed to determine shader file size with path: %s", shader_file_path);
+            window_destroy(window);
+            return NULL;
         }
 
         if (fseek(file, 0, SEEK_SET) != 0)
         {
-            log_error("Failed to rewind shader file with path: %s", shader_file_path);
-            shader_module_creation_failed_index = shader_index;
             fclose(file);
-            break;
+            log_error("Failed to rewind shader file with path: %s", shader_file_path);
+            window_destroy(window);
+            return NULL;
         }
 
         if (size % 4 != 0)
         {
-            log_error("Shader file size is not aligned: %s", shader_file_path);
-            shader_module_creation_failed_index = shader_index;
             fclose(file);
-            break;
+            log_error("Shader file size is not aligned: %s", shader_file_path);
+            window_destroy(window);
+            return NULL;
         }
 
         uint32_t *buffer = (uint32_t *)malloc(size);
         if (buffer == NULL)
         {
-            log_error("Failed to allocate memory for shader file buffer");
-            shader_module_creation_failed_index = shader_index;
             fclose(file);
-            break;
+            log_error("Failed to allocate memory for shader file buffer");
+            window_destroy(window);
+            return NULL;
         }
 
         if (fread(buffer, 1, size, file) != size)
         {
-            log_error("Failed to read full shader file: %s", shader_file_path);
-            shader_module_creation_failed_index = shader_index;
             free(buffer);
             fclose(file);
-            break;
+            log_error("Failed to read full shader file: %s", shader_file_path);
+            window_destroy(window);
+            return NULL;
         }
 
         fclose(file);
@@ -1156,7 +1154,7 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
 
         result = vkCreateShaderModule
         (
-            logical_device, &shader_module_creation_information, NULL, &shader_modules[shader_index]
+            logical_device, &shader_module_creation_information, NULL, &window->shader_modules[shader_module_index]
         );
 
         free(buffer);
@@ -1164,22 +1162,26 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
         if (result != VK_SUCCESS)
         {
             log_error("Failed to create shader module: %s", string_VkResult(result));
-            shader_module_creation_failed_index = shader_index;
-            break;
+            window_destroy(window);
+            return NULL;
         }
     }
 
-    if (shader_module_creation_failed_index != UINT32_MAX)
-    {
-        if (shader_module_creation_failed_index != 0)
-        {
-            for (size_t shader_index = 0; shader_index < shader_module_creation_failed_index; ++shader_index)
-            {
-                vkDestroyShaderModule(logical_device, shader_modules[shader_index], NULL);
-            }
-        }
+    VkPipelineLayoutCreateInfo pipeline_layout_creation_information = {};
+    pipeline_layout_creation_information.sType  = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    pipeline_layout_creation_information.setLayoutCount = 0;
+    pipeline_layout_creation_information.pSetLayouts = NULL;
+    pipeline_layout_creation_information.pushConstantRangeCount = 0;
+    pipeline_layout_creation_information.pPushConstantRanges = NULL;
 
-        free(shader_modules);
+    result = vkCreatePipelineLayout
+    (
+        logical_device, &pipeline_layout_creation_information, NULL, &window->pipeline_layout
+    );
+
+    if (result != VK_SUCCESS)
+    {
+        log_error("Failed to create pipeline layout: %s", string_VkResult(result));
         window_destroy(window);
         return NULL;
     }
@@ -1245,6 +1247,15 @@ void window_destroy(Window *window)
     }
 
     free(window->framebuffers);
+
+    vkDestroyPipelineLayout(logical_device, window->pipeline_layout, NULL);
+
+    for (size_t shader_module_index = 0; shader_module_index < window->shader_module_count; ++shader_module_index)
+    {
+        vkDestroyShaderModule(logical_device, window->shader_modules[shader_module_index], NULL);
+    }
+
+    free(window->shader_modules);
 
     vkDestroyRenderPass(logical_device, window->render_pass, NULL);
 
