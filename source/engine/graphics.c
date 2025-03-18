@@ -1349,9 +1349,42 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
     command_pool_creation_information.queueFamilyIndex = context->graphics_queue_family_index;
 
     result = vkCreateCommandPool(logical_device, &command_pool_creation_information, NULL, &window->command_pool);
-    if (result)
+    if (result != VK_SUCCESS)
     {
         log_error("Failed to create command pool: %s", string_VkResult(result));
+        window_destroy(window);
+        return NULL;
+    }
+
+    /*****************************************************************************************************************/
+    // Command Buffers Creation
+    /*****************************************************************************************************************/
+
+    // For now, create one command buffer
+    uint32_t command_buffer_count = 1;
+
+    VkCommandBufferAllocateInfo command_buffer_allocation_information = {};
+    command_buffer_allocation_information.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    command_buffer_allocation_information.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    command_buffer_allocation_information.commandPool = window->command_pool;
+    command_buffer_allocation_information.commandBufferCount = command_buffer_count;
+
+    window->command_buffers = malloc(command_buffer_count * sizeof(VkCommandBuffer));
+    if (window->command_buffers == NULL)
+    {
+        log_error("Failed to allocate memory for command buffers");
+        window_destroy(window);
+        return NULL;
+    }
+
+    result = vkAllocateCommandBuffers
+    (
+        logical_device, &command_buffer_allocation_information, window->command_buffers
+    );
+
+    if (result != VK_SUCCESS)
+    {
+        log_error("Failed to create command buffers: %s", string_VkResult(result));
         window_destroy(window);
         return NULL;
     }
@@ -1374,6 +1407,9 @@ void window_destroy(Window *window)
     VkDevice logical_device = window->context->logical_device;
 
     vkDeviceWaitIdle(logical_device);
+
+    vkDestroyCommandPool(logical_device, window->command_pool, NULL);
+    free(window->command_buffers);
 
     for (uint32_t framebuffer_index = 0; framebuffer_index < window->image_count; ++framebuffer_index)
     {
