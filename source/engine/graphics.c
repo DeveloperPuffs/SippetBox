@@ -35,6 +35,7 @@ typedef struct Window
     VkSurfaceKHR surface;
     VkSurfaceFormatKHR surface_format;
     VkSwapchainKHR swapchain;
+    uint32_t image_count;
     VkImage *images;
     VkImageView *image_views;
     VkFramebuffer *framebuffers;
@@ -911,7 +912,7 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
     free(surface_formats);
 
     /*****************************************************************************************************************/
-    // Swapchain creation
+    // Swapchain Creation
     /*****************************************************************************************************************/
 
     VkSwapchainCreateInfoKHR swapchain_creation_information = {};
@@ -948,6 +949,41 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
         return NULL;
     }
 
+    /*****************************************************************************************************************/
+    // Fetching Swapchain Images
+    /*****************************************************************************************************************/
+
+    result = vkGetSwapchainImagesKHR(logical_device, swapchain, &window->image_count, NULL);
+    if (result != VK_SUCCESS)
+    {
+        log_error("Failed to query swapchain image count: %d", string_VkResult(result));
+        window_destroy(window);
+        return NULL;
+    }
+      
+    if (window->image_count == 0)
+    {
+        log_error("No images found in swapchain");
+        window_destroy(window);
+        return NULL;
+    }
+
+    window->images = (VkImage *)malloc(window->image_count * sizeof(VkImage));
+    if (window->images == NULL)
+    {
+        log_error("Failed to allocate memory for swapchain images");
+        window_destroy(window);
+        return NULL;
+    }
+    
+    result = vkGetSwapchainImagesKHR(logical_device, window->swapchain, window->image_count, window->images);
+    if (result != VK_SUCCESS)
+    {
+        log_error("Failed to query swapchain images: %d", string_VkResult(result));
+        window_destroy(window);
+        return NULL;
+    }
+
     return window;
 }
 
@@ -966,6 +1002,13 @@ void window_destroy(Window *window)
     VkDevice logical_device = window->context->logical_device;
 
     vkDeviceWaitIdle(logical_device);
+
+    for (uint32_t image_index = 0; image_index < window->image_count; ++image_index)
+    {
+        vkDestroyImage(logical_device, window->images[image_index], NULL);
+    }
+
+    free(window->images);
 
     vkDestroySwapchainKHR(logical_device, window->swapchain, NULL);
     SDL_Vulkan_DestroySurface(vulkan_instance, window->surface, NULL);
