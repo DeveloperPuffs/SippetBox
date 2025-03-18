@@ -934,8 +934,7 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
     swapchain_creation_information.minImageCount = surface_capabilities.minImageCount;
     swapchain_creation_information.preTransform = surface_capabilities.currentTransform;
 
-    VkSwapchainKHR swapchain;
-    result = vkCreateSwapchainKHR(logical_device, &swapchain_creation_information, NULL, &swapchain);
+    result = vkCreateSwapchainKHR(logical_device, &swapchain_creation_information, NULL, &window->swapchain);
     if (result != VK_SUCCESS)
     {
         log_error("Failed to create swapchain: %s", string_VkResult(result));
@@ -947,7 +946,7 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
     // Fetching Swapchain Images
     /*****************************************************************************************************************/
 
-    result = vkGetSwapchainImagesKHR(logical_device, swapchain, &window->image_count, NULL);
+    result = vkGetSwapchainImagesKHR(logical_device, window->swapchain, &window->image_count, NULL);
     if (result != VK_SUCCESS)
     {
         log_error("Failed to query swapchain image count: %d", string_VkResult(result));
@@ -970,7 +969,7 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
         return NULL;
     }
     
-    result = vkGetSwapchainImagesKHR(logical_device, window->swapchain, window->image_count, window->images);
+    result = vkGetSwapchainImagesKHR(logical_device, window->swapchain, &window->image_count, window->images);
     if (result != VK_SUCCESS)
     {
         log_error("Failed to query swapchain images: %d", string_VkResult(result));
@@ -1069,6 +1068,123 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
     }
 
     /*****************************************************************************************************************/
+    // Pipeline Creation
+    /*****************************************************************************************************************/
+
+    const char *shader_file_paths[] =
+    {
+        "resources/shaders/shader.vert.spv",
+        "resources/shaders/shader.frag.spv"
+    };
+
+    size_t shader_count = sizeof(shader_file_paths) / sizeof(shader_file_paths[0]);
+
+    // If a specific shader module fails to create, this index is used to mark the index of that shader module, which
+    // will be used for looping over the created shader modules (up to this index) and destroying them
+    uint32_t shader_module_creation_failed_index = UINT32_MAX;
+
+    VkShaderModule *shader_modules = (VkShaderModule *)malloc(shader_count * sizeof(VkShaderModule));
+    for (size_t shader_index = 0; shader_index < shader_count; ++shader_index)
+    {
+        const char *shader_file_path = shader_file_paths[shader_index];
+
+        FILE *file = fopen(shader_file_path, "rb");
+        if (file == NULL)
+        {
+            log_error("Failed to open shader file with path: %s", shader_file_path);
+            shader_module_creation_failed_index = shader_index;
+            break;
+        }
+
+        if (fseek(file, 0, SEEK_END) != 0)
+        {
+            log_error("Failed to seek to end of shader file with path: %s", shader_file_path);
+            shader_module_creation_failed_index = shader_index;
+            fclose(file);
+            break;
+        }
+
+        long size = ftell(file);
+        if (size == -1L)
+        {
+            log_error("Failed to determine shader file size with path: %s", shader_file_path);
+            shader_module_creation_failed_index = shader_index;
+            fclose(file);
+            break;
+        }
+
+        if (fseek(file, 0, SEEK_SET) != 0)
+        {
+            log_error("Failed to rewind shader file with path: %s", shader_file_path);
+            shader_module_creation_failed_index = shader_index;
+            fclose(file);
+            break;
+        }
+
+        if (size % 4 != 0)
+        {
+            log_error("Shader file size is not aligned: %s", shader_file_path);
+            shader_module_creation_failed_index = shader_index;
+            fclose(file);
+            break;
+        }
+
+        uint32_t *buffer = (uint32_t *)malloc(size);
+        if (buffer == NULL)
+        {
+            log_error("Failed to allocate memory for shader file buffer");
+            shader_module_creation_failed_index = shader_index;
+            fclose(file);
+            break;
+        }
+
+        if (fread(buffer, 1, size, file) != size)
+        {
+            log_error("Failed to read full shader file: %s", shader_file_path);
+            shader_module_creation_failed_index = shader_index;
+            free(buffer);
+            fclose(file);
+            break;
+        }
+
+        fclose(file);
+
+        VkShaderModuleCreateInfo shader_module_creation_information = {};
+        shader_module_creation_information.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+        shader_module_creation_information.codeSize = size;
+        shader_module_creation_information.pCode = buffer;
+
+        result = vkCreateShaderModule
+        (
+            logical_device, &shader_module_creation_information, NULL, &shader_modules[shader_index]
+        );
+
+        free(buffer);
+
+        if (result != VK_SUCCESS)
+        {
+            log_error("Failed to create shader module: %s", string_VkResult(result));
+            shader_module_creation_failed_index = shader_index;
+            break;
+        }
+    }
+
+    if (shader_module_creation_failed_index != UINT32_MAX)
+    {
+        if (shader_module_creation_failed_index != 0)
+        {
+            for (size_t shader_index = 0; shader_index < shader_module_creation_failed_index; ++shader_index)
+            {
+                vkDestroyShaderModule(logical_device, shader_modules[shader_index], NULL);
+            }
+        }
+
+        free(shader_modules);
+        window_destroy(window);
+        return NULL;
+    }
+
+    /*****************************************************************************************************************/
     // Framebuffers Creation
     /*****************************************************************************************************************/
 
@@ -1084,7 +1200,7 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
     {
         VkFramebufferCreateInfo framebuffer_creation_information = {};
         framebuffer_creation_information.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-        // framebuffer_creation_information.renderPass = render_pass;
+        framebuffer_creation_information.renderPass = window->render_pass;
         framebuffer_creation_information.attachmentCount = 1;
         framebuffer_creation_information.pAttachments = &window->image_views[framebuffer_index];
         framebuffer_creation_information.width = (uint32_t)window_width;
@@ -1130,18 +1246,14 @@ void window_destroy(Window *window)
 
     free(window->framebuffers);
 
+    vkDestroyRenderPass(logical_device, window->render_pass, NULL);
+
     for (uint32_t image_view_index = 0; image_view_index < window->image_count; ++image_view_index)
     {
         vkDestroyImageView(logical_device, window->image_views[image_view_index], NULL);
     }
 
     free(window->image_views);
-
-    for (uint32_t image_index = 0; image_index < window->image_count; ++image_index)
-    {
-        vkDestroyImage(logical_device, window->images[image_index], NULL);
-    }
-
     free(window->images);
 
     vkDestroySwapchainKHR(logical_device, window->swapchain, NULL);
