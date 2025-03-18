@@ -38,8 +38,8 @@ typedef struct Window
     uint32_t image_count;
     VkImage *images;
     VkImageView *image_views;
-    VkPipeline pipeline;
     VkRenderPass render_pass;
+    VkPipeline pipeline;
     VkFramebuffer *framebuffers;
     VkCommandPool command_pool;
     VkCommandBuffer *command_buffers;
@@ -1018,6 +1018,54 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
             window_destroy(window);
             return NULL;
         }
+    }
+
+    /*****************************************************************************************************************/
+    // Render Pass Creation
+    /*****************************************************************************************************************/
+
+    VkAttachmentDescription color_attachment_description = {};
+    color_attachment_description.format = window->surface_format.format;
+    color_attachment_description.samples = VK_SAMPLE_COUNT_1_BIT;
+    color_attachment_description.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    color_attachment_description.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    color_attachment_description.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    color_attachment_description.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    color_attachment_description.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    color_attachment_description.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+    VkAttachmentReference color_attachment_reference = {};
+    color_attachment_reference.attachment = 0;
+    color_attachment_reference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+    VkSubpassDescription subpass_description = {};
+    subpass_description.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    subpass_description.colorAttachmentCount = 1;
+    subpass_description.pColorAttachments = &color_attachment_reference;
+
+    VkSubpassDependency subpass_dependency = {};
+    subpass_dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+    subpass_dependency.dstSubpass = 0;
+    subpass_dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    subpass_dependency.srcAccessMask = 0;
+    subpass_dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    subpass_dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
+    VkRenderPassCreateInfo render_pass_creation_information = {};
+    render_pass_creation_information.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+    render_pass_creation_information.attachmentCount = 1;
+    render_pass_creation_information.pAttachments = &color_attachment_description;
+    render_pass_creation_information.subpassCount = 1;
+    render_pass_creation_information.pSubpasses = &subpass_description;
+    render_pass_creation_information.dependencyCount = 1;
+    render_pass_creation_information.pDependencies = &subpass_dependency;
+
+    result = vkCreateRenderPass(logical_device, &render_pass_creation_information, NULL, &window->render_pass);
+    if (result != VK_SUCCESS)
+    {
+        log_error("Failed to create render pass: %s", string_VkResult(result));
+        window_destroy(window);
+        return NULL;
     }
 
     /*****************************************************************************************************************/
