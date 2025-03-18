@@ -40,6 +40,11 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
 int window_render_frame(Window *window, void (*callback)(void *user_data), void *user_data);
 
 /**
+ * Renders a triangle onto the window. For now, the vertices and colors are hardcoded in the shader files.
+ */
+void window_render_triangle(Window *window);
+
+/**
  * Destroys an instance of `Window` by freeing its resources. Closes the SDL window associated with the given instance.
  */
 void window_destroy(Window *window);

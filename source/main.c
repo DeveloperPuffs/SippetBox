@@ -80,6 +80,7 @@ static int update(State *state)
 static void render(void *user_data)
 {
     State *state = (State *)user_data;
+    window_render_triangle(state->window);
     return;
 }
 
