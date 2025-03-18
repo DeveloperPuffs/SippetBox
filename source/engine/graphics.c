@@ -43,6 +43,8 @@ typedef struct Window
     VkShaderModule *shader_modules;
     VkPipelineLayout pipeline_layout;
     VkPipeline pipeline;
+    VkBuffer vertex_buffer;
+    VkDeviceMemory vertex_buffer_memory;
     VkFramebuffer *framebuffers;
     uint32_t maximum_frames_in_flight;
     VkCommandPool command_pool;
@@ -52,6 +54,14 @@ typedef struct Window
     VkFence *in_flight_fences;
     uint32_t current_frame_index;
 } Window;
+
+// Just place the data for the vertices here for now
+static const float vertices[] =
+{
+    0.0f, -0.5f, 1.0f, 0.0f, 0.0f,
+    0.5f, 0.5f, 0.0f, 1.0f, 0.0f,
+    -0.5f, 0.5f, 0.0f, 0.0f, 1.0f
+};
 
 /*********************************************************************************************************************/
 // Context Functions
@@ -397,7 +407,6 @@ Context *context_create()
 
     VkDeviceCreateInfo device_creation_information = {};
     device_creation_information.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-    device_creation_information.pNext = NULL;
 
     float queue_priority = 1.0f;
     uint32_t queue_creation_information_count = 1;
@@ -1040,13 +1049,13 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
     color_attachment_description.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
     VkAttachmentReference color_attachment_reference = {};
-    color_attachment_reference.attachment = 0;
     color_attachment_reference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    color_attachment_reference.attachment = 0;
 
     VkSubpassDescription subpass_description = {};
     subpass_description.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    subpass_description.colorAttachmentCount = 1;
     subpass_description.pColorAttachments = &color_attachment_reference;
+    subpass_description.colorAttachmentCount = 1;
 
     VkSubpassDependency subpass_dependency = {};
     subpass_dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
@@ -1207,10 +1216,31 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
 
     VkPipelineVertexInputStateCreateInfo vertex_input_state_creation_information = {};
     vertex_input_state_creation_information.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-    vertex_input_state_creation_information.vertexBindingDescriptionCount = 0;
-    vertex_input_state_creation_information.pVertexBindingDescriptions = NULL;
-    vertex_input_state_creation_information.vertexAttributeDescriptionCount = 0;
-    vertex_input_state_creation_information.pVertexAttributeDescriptions = NULL;
+
+    VkVertexInputBindingDescription vertex_input_binding_description = {};
+    vertex_input_binding_description.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+    vertex_input_binding_description.stride = 5 * sizeof(float);
+    vertex_input_binding_description.binding = 0;
+
+    vertex_input_state_creation_information.pVertexBindingDescriptions = &vertex_input_binding_description;
+    vertex_input_state_creation_information.vertexBindingDescriptionCount = 1;
+
+    VkVertexInputAttributeDescription vertex_input_attribute_descriptions[2] = {};
+
+    // Represents the position of the vertex
+    vertex_input_attribute_descriptions[0].location = 0;
+    vertex_input_attribute_descriptions[0].binding = 0;
+    vertex_input_attribute_descriptions[0].format = VK_FORMAT_R32G32_SFLOAT;
+    vertex_input_attribute_descriptions[0].offset = 0;
+
+    // Represents the color of the vertex
+    vertex_input_attribute_descriptions[1].location = 1;
+    vertex_input_attribute_descriptions[1].binding = 0;
+    vertex_input_attribute_descriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
+    vertex_input_attribute_descriptions[1].offset = 2 * sizeof(float);
+    
+    vertex_input_state_creation_information.pVertexAttributeDescriptions = vertex_input_attribute_descriptions;
+    vertex_input_state_creation_information.vertexAttributeDescriptionCount = 2;
 
     VkPipelineInputAssemblyStateCreateInfo input_assembly_state_creation_information = {};
     input_assembly_state_creation_information.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
@@ -1305,6 +1335,104 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
         window_destroy(window);
         return NULL;
     }
+
+    /*****************************************************************************************************************/
+    // Vertex Buffer Creation
+    /*****************************************************************************************************************/
+
+    size_t vertex_buffer_size = 3 * 5 * sizeof(float);
+
+    VkBufferCreateInfo vertex_buffer_creation_information = {};
+    vertex_buffer_creation_information.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    vertex_buffer_creation_information.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+    vertex_buffer_creation_information.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    vertex_buffer_creation_information.size = vertex_buffer_size;
+
+    result = vkCreateBuffer(logical_device, &vertex_buffer_creation_information, NULL, &window->vertex_buffer);
+    if (result != VK_SUCCESS)
+    {
+        log_error("Failed to create vertex buffer: %s", string_VkResult(result));
+        window_destroy(window);
+        return NULL;
+    }
+
+    VkMemoryRequirements memory_requirements;
+    vkGetBufferMemoryRequirements(logical_device, window->vertex_buffer, &memory_requirements);
+
+    VkMemoryAllocateInfo memory_allocation_information = {};
+    memory_allocation_information.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    memory_allocation_information.allocationSize = memory_requirements.size;
+
+    VkPhysicalDeviceMemoryProperties physical_device_memory_properties;
+    vkGetPhysicalDeviceMemoryProperties(physical_device, &physical_device_memory_properties);
+    
+    memory_allocation_information.memoryTypeIndex = UINT32_MAX;
+    VkMemoryPropertyFlagBits physical_device_memory_peroperty_flags =
+    (
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+        VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+    );
+
+    for
+    (
+        uint32_t physical_device_memory_type_index = 0;
+        physical_device_memory_type_index < physical_device_memory_properties.memoryTypeCount;
+        ++physical_device_memory_type_index
+    )
+    {
+        VkMemoryType physical_device_memory_type =
+        (
+            physical_device_memory_properties.memoryTypes[physical_device_memory_type_index]
+        );
+    
+        if
+        (
+            (memory_requirements.memoryTypeBits & (1 << physical_device_memory_type_index)) &&
+            (
+                (physical_device_memory_type.propertyFlags & physical_device_memory_peroperty_flags) ==
+                physical_device_memory_peroperty_flags
+            )
+        )
+        {
+            memory_allocation_information.memoryTypeIndex = physical_device_memory_type_index;
+            break;
+        }
+    }
+
+    if (memory_allocation_information.memoryTypeIndex == UINT32_MAX)
+    {
+        log_error("Failed to find suitable physical device memory type");
+        window_destroy(window);
+        return NULL;
+    }
+
+    result = vkAllocateMemory(logical_device, &memory_allocation_information, NULL, &window->vertex_buffer_memory);
+    if (result != VK_SUCCESS)
+    {
+        log_error("Failed to allocate memory for vertex buffer: %s", string_VkResult(result));
+        window_destroy(window);
+        return NULL;
+    }
+
+    result = vkBindBufferMemory(logical_device, window->vertex_buffer, window->vertex_buffer_memory, 0);
+    if (result != VK_SUCCESS)
+    {
+        log_error("Failed to bind vertex buffer memory to vertex buffer: %s", string_VkResult(result));
+        window_destroy(window);
+        return NULL;
+    }
+
+    void* data;
+    result = vkMapMemory(logical_device, window->vertex_buffer_memory, 0, vertex_buffer_size, 0, &data);
+    if (result != VK_SUCCESS)
+    {
+        log_error("Failed to map vertex buffer memory: %s", string_VkResult(result));
+        window_destroy(window);
+        return NULL;
+    }
+
+    memcpy(data, vertices, vertex_buffer_size);
+    vkUnmapMemory(logical_device, window->vertex_buffer_memory);
 
     /*****************************************************************************************************************/
     // Framebuffers Creation
@@ -1543,7 +1671,6 @@ int window_render_frame(Window *window, void (*callback)(void *user_data), void 
     render_pass_beginning_information.clearValueCount = 1;
 
     vkCmdBeginRenderPass(command_buffer, &render_pass_beginning_information, VK_SUBPASS_CONTENTS_INLINE);
-    vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, window->pipeline);
 
     // Trigger the callback to let the user pass rendering commands
     callback(user_data);
@@ -1605,7 +1732,14 @@ int window_render_frame(Window *window, void (*callback)(void *user_data), void 
 
 void window_render_triangle(Window *window)
 {
-    vkCmdDraw(window->command_buffers[window->current_frame_index], 3, 1, 0, 0);
+    VkCommandBuffer command_buffer = window->command_buffers[window->current_frame_index];
+
+    vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, window->pipeline);
+
+    VkDeviceSize offsets[1] = {0};
+    vkCmdBindVertexBuffers(command_buffer, 0, 1, &window->vertex_buffer, offsets);
+
+    vkCmdDraw(command_buffer, 3, 1, 0, 0);
 }
 
 /*********************************************************************************************************************/
@@ -1644,6 +1778,9 @@ void window_destroy(Window *window)
     }
 
     free(window->framebuffers);
+
+    vkDestroyBuffer(logical_device, window->vertex_buffer, NULL);
+    vkFreeMemory(logical_device, window->vertex_buffer_memory, NULL);
 
     vkDestroyPipeline(logical_device, window->pipeline, NULL);
     vkDestroyPipelineLayout(logical_device, window->pipeline_layout, NULL);
