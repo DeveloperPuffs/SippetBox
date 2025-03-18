@@ -1339,6 +1339,23 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
         }
     }
 
+    /*****************************************************************************************************************/
+    // Command Pool Creation
+    /*****************************************************************************************************************/
+
+    VkCommandPoolCreateInfo command_pool_creation_information = {};
+    command_pool_creation_information.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+    command_pool_creation_information.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+    command_pool_creation_information.queueFamilyIndex = context->graphics_queue_family_index;
+
+    result = vkCreateCommandPool(logical_device, &command_pool_creation_information, NULL, &window->command_pool);
+    if (result)
+    {
+        log_error("Failed to create command pool: %s", string_VkResult(result));
+        window_destroy(window);
+        return NULL;
+    }
+
     return window;
 }
 
