@@ -784,6 +784,17 @@ static inline uint32_t rate_physical_device_extensions(VkPhysicalDevice physical
 }
 
 /*********************************************************************************************************************/
+// Window Functions
+/*********************************************************************************************************************/
+
+static inline int buffer_create
+(
+    VkPhysicalDevice physical_device, VkDevice logical_device, VkDeviceSize buffer_size,
+    VkBufferUsageFlags buffer_usages, VkMemoryPropertyFlags memory_properties, VkBuffer *buffer,
+    VkDeviceMemory *buffer_memory
+);
+
+/*********************************************************************************************************************/
 // Window Creation Function
 /*********************************************************************************************************************/
 
@@ -1340,90 +1351,23 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
     // Vertex Buffer Creation
     /*****************************************************************************************************************/
 
-    size_t vertex_buffer_size = 3 * 5 * sizeof(float);
-
-    VkBufferCreateInfo vertex_buffer_creation_information = {};
-    vertex_buffer_creation_information.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    vertex_buffer_creation_information.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-    vertex_buffer_creation_information.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    vertex_buffer_creation_information.size = vertex_buffer_size;
-
-    result = vkCreateBuffer(logical_device, &vertex_buffer_creation_information, NULL, &window->vertex_buffer);
-    if (result != VK_SUCCESS)
-    {
-        log_error("Failed to create vertex buffer: %s", string_VkResult(result));
-        window_destroy(window);
-        return NULL;
-    }
-
-    VkMemoryRequirements memory_requirements;
-    vkGetBufferMemoryRequirements(logical_device, window->vertex_buffer, &memory_requirements);
-
-    VkMemoryAllocateInfo memory_allocation_information = {};
-    memory_allocation_information.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    memory_allocation_information.allocationSize = memory_requirements.size;
-
-    VkPhysicalDeviceMemoryProperties physical_device_memory_properties;
-    vkGetPhysicalDeviceMemoryProperties(physical_device, &physical_device_memory_properties);
-    
-    memory_allocation_information.memoryTypeIndex = UINT32_MAX;
-    VkMemoryPropertyFlagBits physical_device_memory_peroperty_flags =
+    VkDeviceSize vertex_buffer_size = 3 * 5 * sizeof(float);
+    int buffer_creation_result = createBuffer
     (
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-        VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+        vertex_buffer_size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, window->vertex_buffer,
+        window->vertex_buffer_memory
     );
 
-    for
-    (
-        uint32_t physical_device_memory_type_index = 0;
-        physical_device_memory_type_index < physical_device_memory_properties.memoryTypeCount;
-        ++physical_device_memory_type_index
-    )
+    if (buffer_creation_result == 0)
     {
-        VkMemoryType physical_device_memory_type =
-        (
-            physical_device_memory_properties.memoryTypes[physical_device_memory_type_index]
-        );
-    
-        if
-        (
-            (memory_requirements.memoryTypeBits & (1 << physical_device_memory_type_index)) &&
-            (
-                (physical_device_memory_type.propertyFlags & physical_device_memory_peroperty_flags) ==
-                physical_device_memory_peroperty_flags
-            )
-        )
-        {
-            memory_allocation_information.memoryTypeIndex = physical_device_memory_type_index;
-            break;
-        }
-    }
-
-    if (memory_allocation_information.memoryTypeIndex == UINT32_MAX)
-    {
-        log_error("Failed to find suitable physical device memory type");
+        log_error("Failed to create vertex buffer");
         window_destroy(window);
         return NULL;
     }
 
-    result = vkAllocateMemory(logical_device, &memory_allocation_information, NULL, &window->vertex_buffer_memory);
-    if (result != VK_SUCCESS)
-    {
-        log_error("Failed to allocate memory for vertex buffer: %s", string_VkResult(result));
-        window_destroy(window);
-        return NULL;
-    }
-
-    result = vkBindBufferMemory(logical_device, window->vertex_buffer, window->vertex_buffer_memory, 0);
-    if (result != VK_SUCCESS)
-    {
-        log_error("Failed to bind vertex buffer memory to vertex buffer: %s", string_VkResult(result));
-        window_destroy(window);
-        return NULL;
-    }
-
-    void* data;
-    result = vkMapMemory(logical_device, window->vertex_buffer_memory, 0, vertex_buffer_size, 0, &data);
+    void *vertex_buffer_data;
+    result = vkMapMemory(logical_device, window->vertex_buffer_memory, 0, vertex_buffer_size, 0, &vertex_buffer_data);
     if (result != VK_SUCCESS)
     {
         log_error("Failed to map vertex buffer memory: %s", string_VkResult(result));
@@ -1431,7 +1375,7 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
         return NULL;
     }
 
-    memcpy(data, vertices, vertex_buffer_size);
+    memcpy(vertex_buffer_data, vertices, vertex_buffer_size);
     vkUnmapMemory(logical_device, window->vertex_buffer_memory);
 
     /*****************************************************************************************************************/
@@ -1806,4 +1750,87 @@ void window_destroy(Window *window)
     SDL_Vulkan_DestroySurface(vulkan_instance, window->surface, NULL);
     SDL_DestroyWindow(window->sdl_window_handle);
     free(window);
+}
+
+/*********************************************************************************************************************/
+// Buffer Creation Function
+/*********************************************************************************************************************/
+
+static inline int buffer_create
+(
+    VkPhysicalDevice physical_device, VkDevice logical_device, VkDeviceSize buffer_size,
+    VkBufferUsageFlags buffer_usages, VkMemoryPropertyFlags memory_properties, VkBuffer *buffer,
+    VkDeviceMemory *buffer_memory
+)
+{
+    VkResult result;
+
+    VkBufferCreateInfo buffer_creation_information = {};
+    buffer_creation_information.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    buffer_creation_information.size = buffer_size;
+    buffer_creation_information.usage = buffer_usages;
+    buffer_creation_information.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+    result = vkCreateBuffer(logical_device, &buffer_creation_information, NULL, buffer);
+    if (result != VK_SUCCESS)
+    {
+        log_error("Failed to create buffer: %s", string_VkResult(result));
+        return 0;
+    }
+
+    VkPhysicalDeviceMemoryProperties physical_device_memory_properties;
+    vkGetPhysicalDeviceMemoryProperties(physical_device, &physical_device_memory_properties);
+
+    VkMemoryRequirements memory_requirements;
+    vkGetBufferMemoryRequirements(logical_device, *buffer, &memory_requirements);
+
+    VkMemoryAllocateInfo memory_allocation_information = {};
+    memory_allocation_information.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    memory_allocation_information.allocationSize = memory_requirements.size;
+
+    memory_allocation_information.memoryTypeIndex = UINT32_MAX;
+    for
+    (
+        uint32_t physical_device_memory_type_index = 0;
+        physical_device_memory_type_index < physical_device_memory_properties.memoryTypeCount;
+        ++physical_device_memory_type_index
+    )
+    {
+        VkMemoryType physical_device_memory_type =
+        (
+            physical_device_memory_properties.memoryTypes[physical_device_memory_type_index]
+        );
+
+        if
+        (
+            (memory_requirements.memoryTypeBits & (1 << physical_device_memory_type_index)) &&
+            (physical_device_memory_type.propertyFlags & memory_properties) == memory_properties
+        )
+        {
+            memory_allocation_information.memoryTypeIndex = physical_device_memory_type_index;
+            break;
+        }
+    }
+
+    if (memory_allocation_information.memoryTypeIndex == UINT32_MAX)
+    {
+        log_error("Failed to find suitable physical device memory type buffer memory allocation");
+        return 0;
+    }
+
+    result = vkAllocateMemory(logical_device, &memory_allocation_information, NULL, buffer_memory);
+    if (result != VK_SUCCESS)
+    {
+        log_error("Failed to allocate memory for buffer: %s", string_VkResult(result));
+        return 0;
+    }
+
+    result = vkBindBufferMemory(logical_device, *buffer, *buffer_memory, 0);
+    if (result != VK_SUCCESS)
+    {
+        log_error("Failed to bind buffer memory: %s", string_VkResult(result));
+        return 0;
+    }
+
+    return 1;
 }
