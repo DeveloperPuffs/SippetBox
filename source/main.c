@@ -10,7 +10,6 @@ typedef struct
 {
     Context *context;
     Window *window;
-    Renderer *renderer;
 } State;
 
 static bool update(State *state);
@@ -21,7 +20,6 @@ int main()
     State state = {};
     state.context = NULL;
     state.window = NULL;
-    state.renderer = NULL;
 
     if (SDL_Init(SDL_INIT_VIDEO) == false)
     {
@@ -49,13 +47,6 @@ int main()
         terminate(&state, EXIT_FAILURE);
     }
 
-    state.renderer = renderer_create(state.window);
-    if (state.renderer == NULL)
-    {
-        log_error("Failed to create renderer instance");
-        terminate(&state, EXIT_FAILURE);
-    }
-
     log_debug("Starting program loop ...");
 
     // This will keep waiting for the `update()` function to return `false`
@@ -80,7 +71,6 @@ static bool update(State *state)
 
 static void terminate(State *state, int exit_code)
 {
-    renderer_destroy(state->renderer);
     window_destroy(state->window);
     context_destroy(state->context);
     SDL_Vulkan_UnloadLibrary();

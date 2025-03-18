@@ -18,8 +18,9 @@ void context_destroy(Context *graphics_backend);
 
 /**
  * Stores resources used by a window for creating an environment that can be renderered on. Contains an SDL window
- * handle, a window extent, a window surface, a surface format, a swapchain, swapchain images, image views,
- * framebuffers, and synchronization objects for rendering multiple frames.
+ * handle, a window extent, a window surface, a surface format, a swapchain, the swapchain image count, swapchain
+ * images, image views, a pipeline for rendering operations, a render pass, framebuffers, a command pool, command
+ * buffers, and synchronization objects for rendering multiple frames.
  */
 typedef struct Window Window;
 
@@ -33,20 +34,3 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
  * Destroys an instance of `Window` by freeing its resources. Closes the SDL window associated with the given instance.
  */
 void window_destroy(Window *window);
-
-/**
- * Stores resources used for rendering on a specific environment (for example a `Window` instance). Contains a
- * pipeline, a render pass, a command pool, and command buffers.
- */
-typedef struct Renderer Renderer;
-
-/**
- * Creates an instance of `Renderer` and initializes its resources. Is associated with the given instance of `Window`
- * and its `Context`.
- */
-Renderer *renderer_create(Window *window);
-
-/**
- * Destroys an instance of `Renderer` by freeing its resources.
- */
-void renderer_destroy(Renderer *renderer);

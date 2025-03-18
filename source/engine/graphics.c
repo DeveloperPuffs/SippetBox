@@ -38,20 +38,14 @@ typedef struct Window
     uint32_t image_count;
     VkImage *images;
     VkImageView *image_views;
+    VkPipeline pipeline;
+    VkRenderPass render_pass;
     VkFramebuffer *framebuffers;
+    VkCommandPool command_pool;
+    VkCommandBuffer *command_buffers;
     VkSemaphore *semaphores;
     VkFence *fences;
 } Window;
-
-typedef struct Renderer
-{
-    Window *window;
-    Context *context;
-    VkPipeline pipeline;
-    VkRenderPass render_pass;
-    VkCommandPool command_pool;
-    VkCommandBuffer *command_buffers;
-} Renderer;
 
 /*********************************************************************************************************************/
 // Context Functions
@@ -1026,6 +1020,42 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
         }
     }
 
+    /*****************************************************************************************************************/
+    // Framebuffers Creation
+    /*****************************************************************************************************************/
+
+    window->framebuffers = (VkFramebuffer *)malloc(window->image_count * sizeof(VkFramebuffer));
+    if (window->framebuffers == NULL)
+    {
+        log_error("Failed to allocate memory for framebuffers");
+        window_destroy(window);
+        return NULL;
+    }
+
+    for (uint32_t framebuffer_index = 0; framebuffer_index < window->image_count; ++framebuffer_index)
+    {
+        VkFramebufferCreateInfo framebuffer_creation_information = {};
+        framebuffer_creation_information.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+        // framebuffer_creation_information.renderPass = render_pass;
+        framebuffer_creation_information.attachmentCount = 1;
+        framebuffer_creation_information.pAttachments = &window->image_views[framebuffer_index];
+        framebuffer_creation_information.width = (uint32_t)window_width;
+        framebuffer_creation_information.height = (uint32_t)window_height;
+        framebuffer_creation_information.layers = 1;
+
+        result = vkCreateFramebuffer
+        (
+            logical_device, &framebuffer_creation_information, NULL, &window->framebuffers[framebuffer_index]
+        );
+
+        if (result != VK_SUCCESS)
+        {
+            log_error("Failed to create framebuffer %d: %s", framebuffer_index, string_VkResult(result));
+            window_destroy(window);
+            return NULL;
+        }
+    }
+
     return window;
 }
 
@@ -1045,6 +1075,13 @@ void window_destroy(Window *window)
 
     vkDeviceWaitIdle(logical_device);
 
+    for (uint32_t framebuffer_index = 0; framebuffer_index < window->image_count; ++framebuffer_index)
+    {
+        vkDestroyFramebuffer(logical_device, window->framebuffers[framebuffer_index], NULL);
+    }
+
+    free(window->framebuffers);
+
     for (uint32_t image_view_index = 0; image_view_index < window->image_count; ++image_view_index)
     {
         vkDestroyImageView(logical_device, window->image_views[image_view_index], NULL);
@@ -1063,43 +1100,4 @@ void window_destroy(Window *window)
     SDL_Vulkan_DestroySurface(vulkan_instance, window->surface, NULL);
     SDL_DestroyWindow(window->sdl_window_handle);
     free(window);
-}
-
-/*********************************************************************************************************************/
-// Renderer Creation Function
-/*********************************************************************************************************************/
-
-Renderer *renderer_create(Window *window)
-{
-    if (window == NULL)
-    {
-        log_error("Cannot create 'Renderer' if given 'Window' is 'NULL'");
-        return NULL;
-    }
-
-    Renderer *renderer = (Renderer *)calloc(1, sizeof(Renderer));
-    if (renderer == NULL)
-    {
-        log_error("Failed to allocate memory for renderer instance");
-        return NULL;
-    }
-
-    renderer->window = window;
-    renderer->context = window->context;
-
-    return renderer;
-}
-
-/*********************************************************************************************************************/
-// Renderer Destruction Function
-/*********************************************************************************************************************/
-
-void renderer_destroy(Renderer *renderer)
-{
-    if (renderer == NULL)
-    {
-        return;
-    }
-
-    free(renderer);
 }
