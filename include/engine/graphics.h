@@ -21,8 +21,8 @@ void context_destroy(Context *graphics_backend);
  * handle, a window extent, a window surface, a surface format, a swapchain, the swapchain image count, swapchain
  * images, image views, a render pass, the shader module count for destroying the shader modules one by one, shader
  * modules for the vertex shader and the fragment shader, a pipeline layout, a pipeline for rendering operations,
- * a vertex buffer, framebuffers, the maximum number of frames in flight, a command pool, command buffers,
- * synchronization objects, and the current frame index for rendering multiple frames concurrently.
+ * framebuffers, the maximum number of frames in flight, a command pool, command buffers, a vertex buffer, an index
+ * buffer, synchronization objects, and the current frame index for rendering multiple frames concurrently.
  */
 typedef struct Window Window;
 
