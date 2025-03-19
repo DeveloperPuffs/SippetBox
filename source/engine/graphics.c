@@ -43,12 +43,12 @@ typedef struct Window
     VkShaderModule *shader_modules;
     VkPipelineLayout pipeline_layout;
     VkPipeline pipeline;
-    VkBuffer vertex_buffer;
-    VkDeviceMemory vertex_buffer_memory;
     VkFramebuffer *framebuffers;
     uint32_t maximum_frames_in_flight;
     VkCommandPool command_pool;
     VkCommandBuffer *command_buffers;
+    VkBuffer vertex_buffer;
+    VkDeviceMemory vertex_buffer_memory;
     VkSemaphore *image_available_semaphores;
     VkSemaphore *render_finished_semaphores;
     VkFence *in_flight_fences;
@@ -794,6 +794,12 @@ static inline int buffer_create
     VkDeviceMemory *buffer_memory
 );
 
+static inline int buffer_copy
+(
+    VkQueue graphics_queue, VkDevice logical_device, VkCommandPool command_pool, VkBuffer source_buffer,
+    VkBuffer destination_buffer, VkDeviceSize buffer_size
+);
+
 /*********************************************************************************************************************/
 // Window Creation Function
 /*********************************************************************************************************************/
@@ -1348,37 +1354,6 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
     }
 
     /*****************************************************************************************************************/
-    // Vertex Buffer Creation
-    /*****************************************************************************************************************/
-
-    VkDeviceSize vertex_buffer_size = 3 * 5 * sizeof(float);
-    int buffer_creation_result = createBuffer
-    (
-        vertex_buffer_size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, window->vertex_buffer,
-        window->vertex_buffer_memory
-    );
-
-    if (buffer_creation_result == 0)
-    {
-        log_error("Failed to create vertex buffer");
-        window_destroy(window);
-        return NULL;
-    }
-
-    void *vertex_buffer_data;
-    result = vkMapMemory(logical_device, window->vertex_buffer_memory, 0, vertex_buffer_size, 0, &vertex_buffer_data);
-    if (result != VK_SUCCESS)
-    {
-        log_error("Failed to map vertex buffer memory: %s", string_VkResult(result));
-        window_destroy(window);
-        return NULL;
-    }
-
-    memcpy(vertex_buffer_data, vertices, vertex_buffer_size);
-    vkUnmapMemory(logical_device, window->vertex_buffer_memory);
-
-    /*****************************************************************************************************************/
     // Framebuffers Creation
     /*****************************************************************************************************************/
 
@@ -1460,6 +1435,74 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
     if (result != VK_SUCCESS)
     {
         log_error("Failed to create command buffers: %s", string_VkResult(result));
+        window_destroy(window);
+        return NULL;
+    }
+
+    /*****************************************************************************************************************/
+    // Vertex Buffer Creation
+    /*****************************************************************************************************************/
+
+    VkDeviceSize buffer_size = 3 * 5 * sizeof(float);
+    
+    VkBuffer staging_buffer;
+    VkDeviceMemory staging_buffer_memory;
+    int staging_buffer_creation_result = buffer_create
+    (
+        physical_device, logical_device, buffer_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &staging_buffer,
+        &staging_buffer_memory
+    );
+
+    if (staging_buffer_creation_result == 0)
+    {
+        log_error("Failed to create staging buffer");
+        window_destroy(window);
+        return NULL;
+    }
+
+    void *buffer_data;
+    result = vkMapMemory(logical_device, staging_buffer_memory, 0, buffer_size, 0, &buffer_data);
+    if (result != VK_SUCCESS)
+    {
+        log_error("Failed to map staging buffer memory: %s", string_VkResult(result));
+        vkDestroyBuffer(logical_device, staging_buffer, NULL);
+        vkFreeMemory(logical_device, staging_buffer_memory, NULL);
+        window_destroy(window);
+        return NULL;
+    }
+
+    memcpy(buffer_data, vertices, buffer_size);
+    vkUnmapMemory(logical_device, staging_buffer_memory);
+
+    int vertex_buffer_creation_result = buffer_create
+    (
+        physical_device, logical_device, buffer_size,
+        VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        &window->vertex_buffer, &window->vertex_buffer_memory
+    );
+
+    if (vertex_buffer_creation_result == 0)
+    {
+        log_error("Failed to create vertex buffer");
+        vkDestroyBuffer(logical_device, staging_buffer, NULL);
+        vkFreeMemory(logical_device, staging_buffer_memory, NULL);
+        window_destroy(window);
+        return NULL;
+    }
+
+    int staging_buffer_copying_result = buffer_copy
+    (
+        context->graphics_queue, logical_device, window->command_pool, staging_buffer, window->vertex_buffer,
+        buffer_size
+    );
+
+    vkDestroyBuffer(logical_device, staging_buffer, NULL);
+    vkFreeMemory(logical_device, staging_buffer_memory, NULL);
+
+    if (staging_buffer_copying_result == 0)
+    {
+        log_error("Failed to copy staging buffer onto vertex buffer");
         window_destroy(window);
         return NULL;
     }
@@ -1815,6 +1858,7 @@ static inline int buffer_create
     if (memory_allocation_information.memoryTypeIndex == UINT32_MAX)
     {
         log_error("Failed to find suitable physical device memory type buffer memory allocation");
+        vkDestroyBuffer(logical_device, *buffer, NULL);
         return 0;
     }
 
@@ -1822,6 +1866,7 @@ static inline int buffer_create
     if (result != VK_SUCCESS)
     {
         log_error("Failed to allocate memory for buffer: %s", string_VkResult(result));
+        vkDestroyBuffer(logical_device, *buffer, NULL);
         return 0;
     }
 
@@ -1829,6 +1874,78 @@ static inline int buffer_create
     if (result != VK_SUCCESS)
     {
         log_error("Failed to bind buffer memory: %s", string_VkResult(result));
+        vkDestroyBuffer(logical_device, *buffer, NULL);
+        vkFreeMemory(logical_device, *buffer_memory, NULL);
+        return 0;
+    }
+
+    return 1;
+}
+
+static inline int buffer_copy
+(
+    VkQueue graphics_queue, VkDevice logical_device, VkCommandPool command_pool, VkBuffer source_buffer,
+    VkBuffer destination_buffer, VkDeviceSize buffer_size
+)
+{
+    VkResult result;
+
+    VkCommandBufferAllocateInfo command_buffer_allocation_information = {};
+    command_buffer_allocation_information.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    command_buffer_allocation_information.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    command_buffer_allocation_information.commandPool = command_pool;
+    command_buffer_allocation_information.commandBufferCount = 1;
+
+    VkCommandBuffer command_buffer;
+    result = vkAllocateCommandBuffers(logical_device, &command_buffer_allocation_information, &command_buffer);
+    if (result != VK_SUCCESS)
+    {
+        log_error("Failed to create command buffer for copying buffer: %s", string_VkResult(result));
+        return 0;
+    }
+
+    VkCommandBufferBeginInfo command_buffer_beginning_information = {};
+    command_buffer_beginning_information.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    command_buffer_beginning_information.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+    result = vkBeginCommandBuffer(command_buffer, &command_buffer_beginning_information);
+    if (result != VK_SUCCESS)
+    {
+        log_error("Failed to begin command buffer for copying buffer: %s", string_VkResult(result));
+        vkFreeCommandBuffers(logical_device, command_pool, 1, &command_buffer);
+        return 0;
+    }
+
+    VkBufferCopy buffer_copy_region = {};
+    buffer_copy_region.size = buffer_size;
+    vkCmdCopyBuffer(command_buffer, source_buffer, destination_buffer, 1, &buffer_copy_region);
+
+    result = vkEndCommandBuffer(command_buffer);
+    if (result != VK_SUCCESS)
+    {
+        log_error("Failed to end command buffer for copying buffer: %s", string_VkResult(result));
+        vkFreeCommandBuffers(logical_device, command_pool, 1, &command_buffer);
+        return 0;
+    }
+
+    VkSubmitInfo submission_information = {};
+    submission_information.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submission_information.pCommandBuffers = &command_buffer;
+    submission_information.commandBufferCount = 1;
+
+    result = vkQueueSubmit(graphics_queue, 1, &submission_information, VK_NULL_HANDLE);
+    if (result != VK_SUCCESS)
+    {
+        log_error("Failed to submit command buffer for copying buffer: %s", string_VkResult(result));
+        vkFreeCommandBuffers(logical_device, command_pool, 1, &command_buffer);
+        return 0;
+    }
+
+    result = vkQueueWaitIdle(graphics_queue);
+    vkFreeCommandBuffers(logical_device, command_pool, 1, &command_buffer);
+    if (result != VK_SUCCESS)
+    {
+        log_error("Failed to wait for command buffer to complete copying buffer: %s", string_VkResult(result));
         return 0;
     }
 
