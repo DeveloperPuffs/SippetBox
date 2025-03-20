@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
@@ -2026,10 +2027,12 @@ void window_render_triangle(Window *window)
 {
     UniformBufferObject uniform_buffer_object = {};
 
-    float time = 1;
+    struct timespec time;
+    clock_gettime(CLOCK_MONOTONIC, &time);
+    float current_time = time.tv_sec + time.tv_nsec / 1e9;
 
     const float rotation_axis[3] = {0.0f, 0.0f, 1.0f};
-    matrix_4x4_rotate(uniform_buffer_object.model, time * (acos(-1.0) / 180.0f) * 90.0f, rotation_axis);
+    matrix_4x4_rotate(uniform_buffer_object.model, current_time * (acos(-1.0) / 180.0f) * 90.0f, rotation_axis);
 
     const float pov[3] = {2.0f, 2.0f, 2.0f};
     const float center[3] = {0.0f, 0.0f, 0.0f};
