@@ -6,6 +6,7 @@
 #include <vulkan/vulkan.h>
 #include <vulkan/vk_enum_string_helper.h>
 
+#include <engine/math.h>
 #include <engine/platform.h>
 #include <engine/logging.h>
 
@@ -41,6 +42,7 @@ typedef struct Window
     VkRenderPass render_pass;
     size_t shader_module_count;
     VkShaderModule *shader_modules;
+    VkDescriptorSetLayout descriptor_set_layout;
     VkPipelineLayout pipeline_layout;
     VkPipeline pipeline;
     VkFramebuffer *framebuffers;
@@ -51,13 +53,25 @@ typedef struct Window
     VkDeviceMemory vertex_buffer_memory;
     VkBuffer index_buffer;
     VkDeviceMemory index_buffer_memory;
+    VkBuffer *uniform_buffers;
+    VkDeviceMemory *uniform_buffers_memory;
+    void **uniform_buffers_mapped;
+    VkDescriptorPool descriptor_pool;
+    VkDescriptorSet *descriptor_sets;
     VkSemaphore *image_available_semaphores;
     VkSemaphore *render_finished_semaphores;
     VkFence *in_flight_fences;
     uint32_t current_frame_index;
 } Window;
 
-// Just place the data for the vertices and indices here for now
+// Just place the data for the UBO, the vertices and indices here for now
+
+typedef struct UniformBufferObject
+{
+    float model[4][4];
+    float view[4][4];
+    float projection[4][4];
+} UniformBufferObject;
 
 /*
 static const int vertex_count = 3;
@@ -1121,7 +1135,7 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
     }
 
     /*****************************************************************************************************************/
-    // Pipeline Creation
+    // Shader Modules Creation
     /*****************************************************************************************************************/
 
     const char *shader_file_paths[] =
@@ -1217,12 +1231,44 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
         }
     }
 
+    /*****************************************************************************************************************/
+    // Descriptor Set Layout Creation
+    /*****************************************************************************************************************/
+
+    VkDescriptorSetLayoutBinding uniform_object_buffer_layout_binding = {};
+    uniform_object_buffer_layout_binding.binding = 0;
+    uniform_object_buffer_layout_binding.descriptorCount = 1;
+    uniform_object_buffer_layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    uniform_object_buffer_layout_binding.pImmutableSamplers = NULL;
+    uniform_object_buffer_layout_binding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+    VkDescriptorSetLayoutCreateInfo descriptor_set_layout_creation_information = {};
+    descriptor_set_layout_creation_information.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    descriptor_set_layout_creation_information.pBindings = &uniform_object_buffer_layout_binding;
+    descriptor_set_layout_creation_information.bindingCount = 1;
+
+    result = vkCreateDescriptorSetLayout
+    (
+        logical_device, &descriptor_set_layout_creation_information, NULL, &window->descriptor_set_layout
+    );
+
+    if (result != VK_SUCCESS)
+    {
+        log_error("Failed to create descriptor set layout: %s", string_VkResult(result));
+        window_destroy(window);
+        return NULL;
+    }
+
+    /*****************************************************************************************************************/
+    // Pipeline Layout Creation
+    /*****************************************************************************************************************/
+
     VkPipelineLayoutCreateInfo pipeline_layout_creation_information = {};
     pipeline_layout_creation_information.sType  = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipeline_layout_creation_information.setLayoutCount = 0;
-    pipeline_layout_creation_information.pSetLayouts = NULL;
-    pipeline_layout_creation_information.pushConstantRangeCount = 0;
+    pipeline_layout_creation_information.pSetLayouts = &window->descriptor_set_layout;
+    pipeline_layout_creation_information.setLayoutCount = 1;
     pipeline_layout_creation_information.pPushConstantRanges = NULL;
+    pipeline_layout_creation_information.pushConstantRangeCount = 0;
 
     result = vkCreatePipelineLayout
     (
@@ -1235,6 +1281,10 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
         window_destroy(window);
         return NULL;
     }
+
+    /*****************************************************************************************************************/
+    // Pipeline Creation
+    /*****************************************************************************************************************/
 
     VkPipelineShaderStageCreateInfo vertex_shader_stage_creation_information = {};
     vertex_shader_stage_creation_information.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -1314,7 +1364,7 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
     rasterization_state_creation_information.polygonMode = VK_POLYGON_MODE_FILL;
     rasterization_state_creation_information.lineWidth = 1.0f;
     rasterization_state_creation_information.cullMode = VK_CULL_MODE_BACK_BIT;
-    rasterization_state_creation_information.frontFace = VK_FRONT_FACE_CLOCKWISE;
+    rasterization_state_creation_information.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
     rasterization_state_creation_information.depthBiasEnable = VK_FALSE;
 
     VkPipelineMultisampleStateCreateInfo multisampling_state_creation_information = {};
@@ -1605,6 +1655,164 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
     }
 
     /*****************************************************************************************************************/
+    // Uniform Buffers Creation
+    /*****************************************************************************************************************/
+
+    uint32_t uniform_buffer_count = window->maximum_frames_in_flight;
+    VkDeviceSize uniform_buffer_size = sizeof(UniformBufferObject);
+
+    window->uniform_buffers = (VkBuffer *)calloc(uniform_buffer_count, sizeof(VkBuffer));
+    if (window->uniform_buffers == NULL)
+    {
+        log_error("Failed to allocate memory for uniform buffers");
+        window_destroy(window);
+        return NULL;
+    }
+    
+    window->uniform_buffers_memory = (VkDeviceMemory *)calloc(uniform_buffer_count, sizeof(VkDeviceMemory));
+    if (window->uniform_buffers_memory == NULL)
+    {
+        log_error("Failed to allocate memory for uniform buffers memory");
+        window_destroy(window);
+        return NULL;
+    }
+
+    window->uniform_buffers_mapped = (void **)calloc(uniform_buffer_count, sizeof(void *));
+    if (window->uniform_buffers_mapped == NULL)
+    {
+        log_error("Failed to allocate memory for uniform buffers mapped");
+        window_destroy(window);
+        return NULL;
+    }
+
+    for (size_t uniform_buffer_index = 0; uniform_buffer_index < uniform_buffer_count; ++uniform_buffer_index)
+    {
+        int uniform_buffer_creation_result = buffer_create
+        (
+            physical_device, logical_device, uniform_buffer_size, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            &window->uniform_buffers[uniform_buffer_index], &window->uniform_buffers_memory[uniform_buffer_index]
+        );
+
+        if (uniform_buffer_creation_result == 0)
+        {
+            log_error("Failed to create uniform buffer #%d", uniform_buffer_index);
+            window_destroy(window);
+            return NULL;
+        }
+
+        result = vkMapMemory
+        (
+            logical_device, window->uniform_buffers_memory[uniform_buffer_index], 0, uniform_buffer_size, 0,
+            &window->uniform_buffers_mapped[uniform_buffer_index]
+        );
+
+        if (result != VK_SUCCESS)
+        {
+            log_error
+            (
+                "Failed to map memory for uniform buffer #%d: %s", uniform_buffer_index, string_VkResult(result)
+            );
+
+            window_destroy(window);
+            return NULL;
+        }
+    }
+
+    /*****************************************************************************************************************/
+    // Descriptor Pool Creation
+    /*****************************************************************************************************************/
+
+    VkDescriptorPoolSize descriptor_pool_size = {};
+    descriptor_pool_size.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    descriptor_pool_size.descriptorCount = (uint32_t)window->maximum_frames_in_flight;
+
+    VkDescriptorPoolCreateInfo descriptor_pool_creation_information = {};
+    descriptor_pool_creation_information.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    descriptor_pool_creation_information.maxSets = (uint16_t)window->maximum_frames_in_flight;
+    descriptor_pool_creation_information.pPoolSizes = &descriptor_pool_size;
+    descriptor_pool_creation_information.poolSizeCount = 1;
+
+    result = vkCreateDescriptorPool
+    (
+        logical_device, &descriptor_pool_creation_information, NULL, &window->descriptor_pool
+    );
+
+    if (result != VK_SUCCESS)
+    {
+        log_error("Failed to create descrioptor pool: %s", string_VkResult(result));
+        window_destroy(window);
+        return NULL;
+    }
+
+    /*****************************************************************************************************************/
+    // Descriptor Sets Creation
+    /*****************************************************************************************************************/
+
+    VkDescriptorSetAllocateInfo descriptor_set_allocation_information = {};
+    descriptor_set_allocation_information.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    descriptor_set_allocation_information.descriptorPool = window->descriptor_pool;
+    descriptor_set_allocation_information.descriptorSetCount = (uint32_t)window->maximum_frames_in_flight;
+
+    // TODO: Address this issue:
+    // I am not sure why, but it thinks that I have multiple (the number of maximum frames in flight, to be precise)
+    // descriptor set layouts, and I can't get to fix this. So this array is used temporarly to fill in the array of
+    // descriptor set layouts expected in `descriptor_set_allocation_information.pSetLayouts` 
+    VkDescriptorSetLayout descriptor_set_layouts[window->maximum_frames_in_flight];
+
+    for
+    (
+        uint32_t descriptor_set_layout_index = 0;
+        descriptor_set_layout_index < window->maximum_frames_in_flight;
+        ++descriptor_set_layout_index
+    )
+    {
+        descriptor_set_layouts[descriptor_set_layout_index] = window->descriptor_set_layout;
+    }
+
+    descriptor_set_allocation_information.pSetLayouts = descriptor_set_layouts;
+
+    window->descriptor_sets = (VkDescriptorSet *)calloc(window->maximum_frames_in_flight, sizeof(VkDescriptorSet));
+    if (window->descriptor_sets == NULL)
+    {
+        log_error("Failed to allocate memory for descriptor sets");
+        window_destroy(window);
+        return NULL;
+    }
+
+    result = vkAllocateDescriptorSets(logical_device, &descriptor_set_allocation_information, window->descriptor_sets);
+    if (result != VK_SUCCESS)
+    {
+        log_error("Failed to allocated descriptor sets: %s", string_VkResult(result));
+        window_destroy(window);
+        return NULL;
+    }
+
+    for
+    (
+        size_t descriptor_set_index = 0;
+        descriptor_set_index < window->maximum_frames_in_flight;
+        ++descriptor_set_index
+    )
+    {
+        VkDescriptorBufferInfo descriptor_buffer_information = {};
+        descriptor_buffer_information.range = sizeof(UniformBufferObject);
+        descriptor_buffer_information.buffer = window->uniform_buffers[descriptor_set_index];
+        descriptor_buffer_information.offset = 0;
+
+        VkWriteDescriptorSet write_descriptor_set = {};
+        write_descriptor_set.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        write_descriptor_set.dstSet = window->descriptor_sets[descriptor_set_index];
+        write_descriptor_set.dstBinding = 0;
+        write_descriptor_set.dstArrayElement = 0;
+        write_descriptor_set.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        write_descriptor_set.descriptorCount = 1;
+        write_descriptor_set.pBufferInfo = &descriptor_buffer_information;
+
+        vkUpdateDescriptorSets(logical_device, 1, &write_descriptor_set, 0, NULL);
+    }
+
+    /*****************************************************************************************************************/
     // Synchronization Objects Creation
     /*****************************************************************************************************************/
 
@@ -1816,6 +2024,26 @@ int window_render_frame(Window *window, void (*callback)(void *user_data), void 
 
 void window_render_triangle(Window *window)
 {
+    UniformBufferObject uniform_buffer_object = {};
+
+    float time = 1;
+
+    const float rotation_axis[3] = {0.0f, 0.0f, 1.0f};
+    matrix_4x4_rotate(uniform_buffer_object.model, time * (acos(-1.0) / 180.0f) * 90.0f, rotation_axis);
+
+    const float pov[3] = {2.0f, 2.0f, 2.0f};
+    const float center[3] = {0.0f, 0.0f, 0.0f};
+    const float up[3] = {0.0f, 0.0f, 1.0f};
+    matrix_4x4_view(uniform_buffer_object.view, pov, center, up);
+
+    float aspect_ratio = window->window_extent.width / (float)window->window_extent.height;
+    matrix_4x4_perspective(uniform_buffer_object.projection, 45.0f * (acos(-1.0) / 180.0f), aspect_ratio, 0.1f, 10.0f);
+
+    uniform_buffer_object.projection[1][1] *= -1.0f;
+
+    void *uniform_buffer_memory = window->uniform_buffers_mapped[window->current_frame_index];
+    memcpy(uniform_buffer_memory, &uniform_buffer_object, sizeof(uniform_buffer_object));
+
     VkCommandBuffer command_buffer = window->command_buffers[window->current_frame_index];
 
     vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, window->pipeline);
@@ -1826,6 +2054,12 @@ void window_render_triangle(Window *window)
     vkCmdBindIndexBuffer(command_buffer, window->index_buffer, 0, VK_INDEX_TYPE_UINT16);
 
     // vkCmdDraw(command_buffer, 3, 1, 0, 0);
+
+    vkCmdBindDescriptorSets
+    (
+        command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, window->pipeline_layout, 0, 1,
+        &window->descriptor_sets[window->current_frame_index], 0, NULL
+    );
 
     vkCmdDrawIndexed(command_buffer, index_count, 1, 0, 0, 0);
 }
@@ -1851,11 +2085,21 @@ void window_destroy(Window *window)
         vkDestroyFence(logical_device, window->in_flight_fences[frame_index], NULL);
         vkDestroySemaphore(logical_device, window->render_finished_semaphores[frame_index], NULL);
         vkDestroySemaphore(logical_device, window->image_available_semaphores[frame_index], NULL);
+        vkDestroyBuffer(logical_device, window->uniform_buffers[frame_index], NULL);
+        vkFreeMemory(logical_device, window->uniform_buffers_memory[frame_index], NULL);
+        free(window->uniform_buffers_mapped[frame_index]);
     }
 
     free(window->in_flight_fences);
     free(window->render_finished_semaphores);
     free(window->image_available_semaphores);
+    free(window->uniform_buffers_mapped);
+    free(window->uniform_buffers_memory);
+    free(window->uniform_buffers);
+
+    free(window->descriptor_sets);
+    vkDestroyDescriptorPool(logical_device, window->descriptor_pool, NULL);
+    vkDestroyDescriptorSetLayout(logical_device, window->descriptor_set_layout, NULL);
 
     vkDestroyBuffer(logical_device, window->index_buffer, NULL);
     vkFreeMemory(logical_device, window->index_buffer_memory, NULL);
@@ -1985,6 +2229,10 @@ static inline int buffer_create
 
     return 1;
 }
+
+/*********************************************************************************************************************/
+// Buffer Copy Function
+/*********************************************************************************************************************/
 
 static inline int buffer_copy
 (

@@ -1,8 +1,7 @@
 #pragma once
 
 /**
- * Stores resources that can be shared between multiple renderers/windows. Contains a Vulkan
- * instance, a physical device, a logical device, and multiple queues.
+ * Stores resources that can be shared between multiple renderers/windows.
  */
 typedef struct Context Context;
 
@@ -17,12 +16,7 @@ Context *context_create();
 void context_destroy(Context *graphics_backend);
 
 /**
- * Stores resources used by a window for creating an environment that can be renderered on. Contains an SDL window
- * handle, a window extent, a window surface, a surface format, a swapchain, the swapchain image count, swapchain
- * images, image views, a render pass, the shader module count for destroying the shader modules one by one, shader
- * modules for the vertex shader and the fragment shader, a pipeline layout, a pipeline for rendering operations,
- * framebuffers, the maximum number of frames in flight, a command pool, command buffers, a vertex buffer, an index
- * buffer, synchronization objects, and the current frame index for rendering multiple frames concurrently.
+ * Stores resources used by a window for creating an environment that can be renderered on.
  */
 typedef struct Window Window;
 
