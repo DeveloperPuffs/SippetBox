@@ -2,6 +2,7 @@
 #include <string.h>
 #include <time.h>
 
+#include <png.h>
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
 #include <vulkan/vulkan.h>
@@ -50,6 +51,8 @@ typedef struct Window
     uint32_t maximum_frames_in_flight;
     VkCommandPool command_pool;
     VkCommandBuffer *command_buffers;
+    VkImage texture_image;
+    VkDeviceMemory texture_image_memory;
     VkBuffer vertex_buffer;
     VkDeviceMemory vertex_buffer_memory;
     VkBuffer index_buffer;
@@ -823,17 +826,29 @@ static inline uint32_t rate_physical_device_extensions(VkPhysicalDevice physical
 // Window Functions
 /*********************************************************************************************************************/
 
+static inline int memory_allocate
+(
+    Window *window, VkMemoryRequirements memory_requirements, VkMemoryPropertyFlags memory_properties,
+    VkDeviceMemory *memory
+);
+
+static inline int command_start(Window *window, VkCommandBuffer *command_buffer);
+static inline int command_finish(Window *window, VkCommandBuffer command_buffer);
+
 static inline int buffer_create
 (
-    VkPhysicalDevice physical_device, VkDevice logical_device, VkDeviceSize buffer_size,
-    VkBufferUsageFlags buffer_usages, VkMemoryPropertyFlags memory_properties, VkBuffer *buffer,
-    VkDeviceMemory *buffer_memory
+    Window *window, VkDeviceSize buffer_size, VkBufferUsageFlags buffer_usages,
+    VkMemoryPropertyFlags memory_properties, VkBuffer *buffer, VkDeviceMemory *buffer_memory
 );
 
 static inline int buffer_copy
 (
-    VkQueue graphics_queue, VkDevice logical_device, VkCommandPool command_pool, VkBuffer source_buffer,
-    VkBuffer destination_buffer, VkDeviceSize buffer_size
+    Window *window, VkBuffer source_buffer, VkBuffer destination_buffer, VkDeviceSize buffer_size
+);
+
+static inline int image_png_load
+(
+    Window *window, const char *file_path, VkImage *texture_image, VkDeviceMemory *texture_image_memory
 );
 
 /*********************************************************************************************************************/
@@ -1512,6 +1527,23 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
     }
 
     /*****************************************************************************************************************/
+    // Texture Image Creation
+    /*****************************************************************************************************************/
+
+    if
+    (
+        image_png_load
+        (
+            window, "resources/images/textures/Texture.png", &window->texture_image, &window->texture_image_memory
+        ) == 0
+    )
+    {
+        log_error("Failed to load texture image");
+        window_destroy(window);
+        return NULL;
+    }
+
+    /*****************************************************************************************************************/
     // Vertex Buffer Creation
     /*****************************************************************************************************************/
 
@@ -1519,14 +1551,16 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
     
     VkBuffer vertex_staging_buffer;
     VkDeviceMemory vertex_staging_buffer_memory;
-    int vertex_staging_buffer_creation_result = buffer_create
-    (
-        physical_device, logical_device, vertex_buffer_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &vertex_staging_buffer,
-        &vertex_staging_buffer_memory
-    );
 
-    if (vertex_staging_buffer_creation_result == 0)
+    if
+    (
+        buffer_create
+        (
+            window, vertex_buffer_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &vertex_staging_buffer,
+            &vertex_staging_buffer_memory
+        ) == 0
+    )
     {
         log_error("Failed to create vertex staging buffer");
         window_destroy(window);
@@ -1551,14 +1585,14 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
     memcpy(vertex_staging_buffer_data, vertices, vertex_buffer_size);
     vkUnmapMemory(logical_device, vertex_staging_buffer_memory);
 
-    int vertex_buffer_creation_result = buffer_create
+    if
     (
-        physical_device, logical_device, vertex_buffer_size,
-        VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-        &window->vertex_buffer, &window->vertex_buffer_memory
-    );
-
-    if (vertex_buffer_creation_result == 0)
+        buffer_create
+        (
+            window, vertex_buffer_size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &window->vertex_buffer, &window->vertex_buffer_memory
+        ) == 0
+    )
     {
         log_error("Failed to create vertex buffer");
         vkDestroyBuffer(logical_device, vertex_staging_buffer, NULL);
@@ -1567,21 +1601,17 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
         return NULL;
     }
 
-    int vertex_staging_buffer_copying_result = buffer_copy
-    (
-        context->graphics_queue, logical_device, window->command_pool, vertex_staging_buffer, window->vertex_buffer,
-        vertex_buffer_size
-    );
-
-    vkDestroyBuffer(logical_device, vertex_staging_buffer, NULL);
-    vkFreeMemory(logical_device, vertex_staging_buffer_memory, NULL);
-
-    if (vertex_staging_buffer_copying_result == 0)
+    if (buffer_copy(window, vertex_staging_buffer, window->vertex_buffer, vertex_buffer_size) == 0)
     {
         log_error("Failed to copy staging buffer onto vertex buffer");
+        vkDestroyBuffer(logical_device, vertex_staging_buffer, NULL);
+        vkFreeMemory(logical_device, vertex_staging_buffer_memory, NULL);
         window_destroy(window);
         return NULL;
     }
+
+    vkDestroyBuffer(logical_device, vertex_staging_buffer, NULL);
+    vkFreeMemory(logical_device, vertex_staging_buffer_memory, NULL);
 
     /*****************************************************************************************************************/
     // Index Buffer Creation
@@ -1591,14 +1621,16 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
 
     VkBuffer index_staging_buffer;
     VkDeviceMemory index_staging_buffer_memory;
-    int index_staging_buffer_creation_result = buffer_create
-    (
-        physical_device, logical_device, index_buffer_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &index_staging_buffer,
-        &index_staging_buffer_memory
-    );
 
-    if (index_staging_buffer_creation_result == 0)
+    if
+    (
+        buffer_create
+        (
+            window, index_buffer_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &index_staging_buffer,
+            &index_staging_buffer_memory
+        ) == 0
+    )
     {
         log_error("Failed to create index staging buffer");
         window_destroy(window);
@@ -1623,14 +1655,14 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
     memcpy(index_staging_buffer_data, indices, index_buffer_size);
     vkUnmapMemory(logical_device, index_staging_buffer_memory);
 
-    int index_buffer_creation_result = buffer_create
+    if
     (
-        physical_device, logical_device, index_buffer_size,
-        VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-        &window->index_buffer, &window->index_buffer_memory
-    );
-
-    if (index_buffer_creation_result == 0)
+        buffer_create
+        (
+            window, index_buffer_size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &window->index_buffer, &window->index_buffer_memory
+        ) == 0
+    )
     {
         log_error("Failed to create index buffer");
         vkDestroyBuffer(logical_device, index_staging_buffer, NULL);
@@ -1639,21 +1671,17 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
         return NULL;
     }
 
-    int index_staging_buffer_copying_result = buffer_copy
-    (
-        context->graphics_queue, logical_device, window->command_pool, index_staging_buffer, window->index_buffer,
-        index_buffer_size
-    );
-
-    vkDestroyBuffer(logical_device, index_staging_buffer, NULL);
-    vkFreeMemory(logical_device, index_staging_buffer_memory, NULL);
-
-    if (index_staging_buffer_copying_result == 0)
+    if (buffer_copy(window, index_staging_buffer, window->index_buffer, index_buffer_size) == 0)
     {
         log_error("Failed to copy staging buffer onto index buffer");
+        vkDestroyBuffer(logical_device, index_staging_buffer, NULL);
+        vkFreeMemory(logical_device, index_staging_buffer_memory, NULL);
         window_destroy(window);
         return NULL;
     }
+
+    vkDestroyBuffer(logical_device, index_staging_buffer, NULL);
+    vkFreeMemory(logical_device, index_staging_buffer_memory, NULL);
 
     /*****************************************************************************************************************/
     // Uniform Buffers Creation
@@ -1688,14 +1716,15 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
 
     for (size_t uniform_buffer_index = 0; uniform_buffer_index < uniform_buffer_count; ++uniform_buffer_index)
     {
-        int uniform_buffer_creation_result = buffer_create
+        if
         (
-            physical_device, logical_device, uniform_buffer_size, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            &window->uniform_buffers[uniform_buffer_index], &window->uniform_buffers_memory[uniform_buffer_index]
-        );
-
-        if (uniform_buffer_creation_result == 0)
+            buffer_create
+            (
+                window, uniform_buffer_size, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                &window->uniform_buffers[uniform_buffer_index], &window->uniform_buffers_memory[uniform_buffer_index]
+            ) == 0
+        )
         {
             log_error("Failed to create uniform buffer #%d", uniform_buffer_index);
             window_destroy(window);
@@ -2110,6 +2139,9 @@ void window_destroy(Window *window)
     vkDestroyBuffer(logical_device, window->vertex_buffer, NULL);
     vkFreeMemory(logical_device, window->vertex_buffer_memory, NULL);
 
+    vkDestroyImage(logical_device, window->texture_image, NULL);
+    vkFreeMemory(logical_device, window->texture_image_memory, NULL);
+
     vkDestroyCommandPool(logical_device, window->command_pool, NULL);
     free(window->command_buffers);
 
@@ -2147,42 +2179,25 @@ void window_destroy(Window *window)
 }
 
 /*********************************************************************************************************************/
-// Buffer Creation Function
+// Memory Allocation Function
 /*********************************************************************************************************************/
 
-static inline int buffer_create
+static inline int memory_allocate
 (
-    VkPhysicalDevice physical_device, VkDevice logical_device, VkDeviceSize buffer_size,
-    VkBufferUsageFlags buffer_usages, VkMemoryPropertyFlags memory_properties, VkBuffer *buffer,
-    VkDeviceMemory *buffer_memory
+    Window *window, VkMemoryRequirements memory_requirements, VkMemoryPropertyFlags memory_properties,
+    VkDeviceMemory *memory
 )
 {
     VkResult result;
 
-    VkBufferCreateInfo buffer_creation_information = {};
-    buffer_creation_information.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    buffer_creation_information.size = buffer_size;
-    buffer_creation_information.usage = buffer_usages;
-    buffer_creation_information.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-    result = vkCreateBuffer(logical_device, &buffer_creation_information, NULL, buffer);
-    if (result != VK_SUCCESS)
-    {
-        log_error("Failed to create buffer: %s", string_VkResult(result));
-        return 0;
-    }
-
     VkPhysicalDeviceMemoryProperties physical_device_memory_properties;
-    vkGetPhysicalDeviceMemoryProperties(physical_device, &physical_device_memory_properties);
-
-    VkMemoryRequirements memory_requirements;
-    vkGetBufferMemoryRequirements(logical_device, *buffer, &memory_requirements);
+    vkGetPhysicalDeviceMemoryProperties(window->context->physical_device, &physical_device_memory_properties);
 
     VkMemoryAllocateInfo memory_allocation_information = {};
     memory_allocation_information.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     memory_allocation_information.allocationSize = memory_requirements.size;
-
     memory_allocation_information.memoryTypeIndex = UINT32_MAX;
+
     for
     (
         uint32_t physical_device_memory_type_index = 0;
@@ -2208,25 +2223,138 @@ static inline int buffer_create
 
     if (memory_allocation_information.memoryTypeIndex == UINT32_MAX)
     {
-        log_error("Failed to find suitable physical device memory type buffer memory allocation");
-        vkDestroyBuffer(logical_device, *buffer, NULL);
+        log_error("Failed to find suitable physical device memory type for memory allocation");
         return 0;
     }
 
-    result = vkAllocateMemory(logical_device, &memory_allocation_information, NULL, buffer_memory);
+    result = vkAllocateMemory(window->context->logical_device, &memory_allocation_information, NULL, memory);
     if (result != VK_SUCCESS)
     {
-        log_error("Failed to allocate memory for buffer: %s", string_VkResult(result));
-        vkDestroyBuffer(logical_device, *buffer, NULL);
+        log_error("Failed to allocate memory: %s", string_VkResult(result));
         return 0;
     }
 
-    result = vkBindBufferMemory(logical_device, *buffer, *buffer_memory, 0);
+    return 1;
+}
+
+/*********************************************************************************************************************/
+// Single Time Command Buffer Functions
+/*********************************************************************************************************************/
+
+static inline int command_start(Window *window, VkCommandBuffer *command_buffer)
+{
+    VkResult result;
+
+    VkCommandBufferAllocateInfo command_buffer_allocation_information = {};
+    command_buffer_allocation_information.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    command_buffer_allocation_information.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    command_buffer_allocation_information.commandPool = window->command_pool;
+    command_buffer_allocation_information.commandBufferCount = 1;
+
+    result = vkAllocateCommandBuffers
+    (
+        window->context->logical_device, &command_buffer_allocation_information, command_buffer
+    );
+
+    if (result != VK_SUCCESS)
+    {
+        log_error("Failed to allocate single time command buffer: %s", string_VkResult(result));
+        return 0;
+    }
+
+    VkCommandBufferBeginInfo command_buffer_beginning_information = {};
+    command_buffer_beginning_information.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    command_buffer_beginning_information.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+    result = vkBeginCommandBuffer(*command_buffer, &command_buffer_beginning_information);
+    if (result != VK_SUCCESS)
+    {
+        log_error("Failed to begin single time command buffer: %s", string_VkResult(result));
+        vkFreeCommandBuffers(window->context->logical_device, window->command_pool, 1, command_buffer);
+        return 0;
+    }
+
+    return 1;
+}
+
+static inline int command_finish(Window *window, VkCommandBuffer command_buffer)
+{
+    VkResult result;
+
+    result = vkEndCommandBuffer(command_buffer);
+    if (result != VK_SUCCESS)
+    {
+        log_error("Failed to end single time command buffer: %s", string_VkResult(result));
+        vkFreeCommandBuffers(window->context->logical_device, window->command_pool, 1, &command_buffer);
+        return 0;
+    }
+
+    VkSubmitInfo submission_information = {};
+    submission_information.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submission_information.commandBufferCount = 1;
+    submission_information.pCommandBuffers = &command_buffer;
+
+    result = vkQueueSubmit(window->context->graphics_queue, 1, &submission_information, VK_NULL_HANDLE);
+    if (result != VK_SUCCESS)
+    {
+        log_error("Failed to submit single time command buffer to graphics queue: %s", string_VkResult(result));
+        vkFreeCommandBuffers(window->context->logical_device, window->command_pool, 1, &command_buffer);
+        return 0;
+    }
+
+    result = vkQueueWaitIdle(window->context->graphics_queue);
+    if (result != VK_SUCCESS)
+    {
+        log_error("Failed to wait for graphics queue: %s", string_VkResult(result));
+        vkFreeCommandBuffers(window->context->logical_device, window->command_pool, 1, &command_buffer);
+        return 0;
+    }
+
+    vkFreeCommandBuffers(window->context->logical_device, window->command_pool, 1, &command_buffer);
+
+    return 1;
+}
+
+/*********************************************************************************************************************/
+// Buffer Creation Function
+/*********************************************************************************************************************/
+
+static inline int buffer_create
+(
+    Window *window, VkDeviceSize buffer_size, VkBufferUsageFlags buffer_usages,
+    VkMemoryPropertyFlags memory_properties, VkBuffer *buffer, VkDeviceMemory *buffer_memory
+)
+{
+    VkResult result;
+
+    VkBufferCreateInfo buffer_creation_information = {};
+    buffer_creation_information.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    buffer_creation_information.size = buffer_size;
+    buffer_creation_information.usage = buffer_usages;
+    buffer_creation_information.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+    result = vkCreateBuffer(window->context->logical_device, &buffer_creation_information, NULL, buffer);
+    if (result != VK_SUCCESS)
+    {
+        log_error("Failed to create buffer: %s", string_VkResult(result));
+        return 0;
+    }
+
+    VkMemoryRequirements memory_requirements;
+    vkGetBufferMemoryRequirements(window->context->logical_device, *buffer, &memory_requirements);
+    if (memory_allocate(window, memory_requirements, memory_properties, buffer_memory) == 0)
+    {
+        log_error("Failed to allocate memory for buffer: %s", string_VkResult(result));
+        vkDestroyBuffer(window->context->logical_device, *buffer, NULL);
+        return 0;
+    }
+
+    result = vkBindBufferMemory(window->context->logical_device, *buffer, *buffer_memory, 0);
     if (result != VK_SUCCESS)
     {
         log_error("Failed to bind buffer memory: %s", string_VkResult(result));
-        vkDestroyBuffer(logical_device, *buffer, NULL);
-        vkFreeMemory(logical_device, *buffer_memory, NULL);
+        vkDestroyBuffer(window->context->logical_device, *buffer, NULL);
+        vkFreeMemory(window->context->logical_device, *buffer_memory, NULL);
         return 0;
     }
 
@@ -2239,35 +2367,13 @@ static inline int buffer_create
 
 static inline int buffer_copy
 (
-    VkQueue graphics_queue, VkDevice logical_device, VkCommandPool command_pool, VkBuffer source_buffer,
-    VkBuffer destination_buffer, VkDeviceSize buffer_size
+    Window *window, VkBuffer source_buffer, VkBuffer destination_buffer, VkDeviceSize buffer_size
 )
 {
-    VkResult result;
-
-    VkCommandBufferAllocateInfo command_buffer_allocation_information = {};
-    command_buffer_allocation_information.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    command_buffer_allocation_information.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    command_buffer_allocation_information.commandPool = command_pool;
-    command_buffer_allocation_information.commandBufferCount = 1;
-
     VkCommandBuffer command_buffer;
-    result = vkAllocateCommandBuffers(logical_device, &command_buffer_allocation_information, &command_buffer);
-    if (result != VK_SUCCESS)
+    if (command_start(window, &command_buffer) == 0)
     {
-        log_error("Failed to create command buffer for copying buffer: %s", string_VkResult(result));
-        return 0;
-    }
-
-    VkCommandBufferBeginInfo command_buffer_beginning_information = {};
-    command_buffer_beginning_information.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    command_buffer_beginning_information.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-
-    result = vkBeginCommandBuffer(command_buffer, &command_buffer_beginning_information);
-    if (result != VK_SUCCESS)
-    {
-        log_error("Failed to begin command buffer for copying buffer: %s", string_VkResult(result));
-        vkFreeCommandBuffers(logical_device, command_pool, 1, &command_buffer);
+        log_error("Failed to start single time command buffer");
         return 0;
     }
 
@@ -2275,32 +2381,434 @@ static inline int buffer_copy
     buffer_copy_region.size = buffer_size;
     vkCmdCopyBuffer(command_buffer, source_buffer, destination_buffer, 1, &buffer_copy_region);
 
-    result = vkEndCommandBuffer(command_buffer);
-    if (result != VK_SUCCESS)
+    if (command_finish(window, command_buffer) == 0)
     {
-        log_error("Failed to end command buffer for copying buffer: %s", string_VkResult(result));
-        vkFreeCommandBuffers(logical_device, command_pool, 1, &command_buffer);
+        log_error("Failed to finish single time command buffer");
         return 0;
     }
 
-    VkSubmitInfo submission_information = {};
-    submission_information.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submission_information.pCommandBuffers = &command_buffer;
-    submission_information.commandBufferCount = 1;
+    return 1;
+}
 
-    result = vkQueueSubmit(graphics_queue, 1, &submission_information, VK_NULL_HANDLE);
-    if (result != VK_SUCCESS)
+/*********************************************************************************************************************/
+// PNG Image to Texture Image and Texture Image Memory Function
+/*********************************************************************************************************************/
+
+static inline int image_layout_transition
+(
+    Window *window, VkImage image, VkFormat format, VkImageLayout previous_image_layout,
+    VkImageLayout next_image_layout
+);
+
+static inline int buffer_copy_to_image
+(
+    Window *window, VkBuffer buffer, VkImage image, uint32_t width, uint32_t height
+);
+
+static inline int image_png_load
+(
+    Window *window, const char *file_path, VkImage *texture_image, VkDeviceMemory *texture_image_memory
+)
+{
+    VkResult result;
+
+    FILE *file = fopen(file_path, "rb");
+    if (file == NULL)
     {
-        log_error("Failed to submit command buffer for copying buffer: %s", string_VkResult(result));
-        vkFreeCommandBuffers(logical_device, command_pool, 1, &command_buffer);
+        log_error("Failed to open file with path: %s", file_path);
         return 0;
     }
 
-    result = vkQueueWaitIdle(graphics_queue);
-    vkFreeCommandBuffers(logical_device, command_pool, 1, &command_buffer);
+    png_structp png_reader = png_create_read_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
+    if (png_reader == NULL)
+    {
+        log_error("Failed to create PNG reader struct");
+        fclose(file);
+        return 0;
+    }
+
+    png_infop png_reader_information = png_create_info_struct(png_reader);
+    if (png_reader_information == NULL)
+    {
+        log_error("Failed to query PNG reader struct information");
+        fclose(file);
+        return 0;
+    }
+
+    if (setjmp(png_jmpbuf(png_reader)) != 0)
+    {
+        log_error("Failed to process PNG");
+        fclose(file);
+        return 0;
+    }
+
+    png_init_io(png_reader, file);
+    png_read_info(png_reader, png_reader_information);
+
+    uint32_t width = png_get_image_width(png_reader, png_reader_information);
+    uint32_t height = png_get_image_height(png_reader, png_reader_information);
+    int color_type = png_get_color_type(png_reader, png_reader_information);
+    int bit_depth = png_get_bit_depth(png_reader, png_reader_information);
+
+    if (bit_depth == 16)
+    {
+        png_set_strip_16(png_reader);
+    }
+    
+    if (color_type == PNG_COLOR_TYPE_PALETTE)
+    {
+        png_set_palette_to_rgb(png_reader);
+    }
+    
+    if (color_type == PNG_COLOR_TYPE_GRAY && bit_depth < 8)
+    {
+        png_set_expand_gray_1_2_4_to_8(png_reader);
+    }
+    
+    if (png_get_valid(png_reader, png_reader_information, PNG_INFO_tRNS) != 0)
+    {
+        png_set_tRNS_to_alpha(png_reader);
+    }
+    
+    if (color_type != PNG_COLOR_TYPE_RGBA)
+    {
+        png_set_filler(png_reader, 0xFF, PNG_FILLER_AFTER);
+    }
+
+    png_read_update_info(png_reader, png_reader_information);
+
+    png_bytep *row_pointers = malloc(height * sizeof(png_bytep));
+    if (row_pointers == NULL)
+    {
+        log_error("Failed to allocate memory for image rows");
+        fclose(file);
+        return 0;
+    }
+
+    for (uint32_t row = 0; row < height; ++row)
+    {
+        row_pointers[row] = malloc(png_get_rowbytes(png_reader, png_reader_information));
+        if (row_pointers[row] == NULL)
+        {
+            log_error("Failed to allocate memory for image column");
+            fclose(file);
+
+            if (row != 0)
+            {
+                // Loop over the allocated rows to free them one by one
+                for (uint32_t current_row = 0; current_row < row; ++current_row)
+                {
+                    free(row_pointers[current_row]);
+                }
+            }
+
+            return 0;
+        }
+    }
+
+    png_read_image(png_reader, row_pointers);
+    png_destroy_read_struct(&png_reader, &png_reader_information, NULL);
+    fclose(file);
+
+    VkDeviceSize image_size = width * height * 4;
+
+    VkBuffer staging_buffer;
+    VkDeviceMemory staging_buffer_memory;
+
+    if
+    (
+        buffer_create
+        (
+            window, image_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &staging_buffer,
+            &staging_buffer_memory
+        ) == 0
+    )
+    {
+        log_error("Failed to create staging buffer for PNG image");
+        for (uint32_t row = 0; row < height; ++row)
+        {
+            free(row_pointers[row]);
+        }
+
+        free(row_pointers);
+        return 0;
+    }
+
+    void *staging_buffer_data;
+    result = vkMapMemory
+    (
+        window->context->logical_device, staging_buffer_memory, 0, image_size, 0, &staging_buffer_data
+    );
+
     if (result != VK_SUCCESS)
     {
-        log_error("Failed to wait for command buffer to complete copying buffer: %s", string_VkResult(result));
+        log_error("Failed to map staging buffer memory: %s", string_VkResult(result));
+        vkDestroyBuffer(window->context->logical_device, staging_buffer, NULL);
+        for (uint32_t row = 0; row < height; ++row)
+        {
+            free(row_pointers[row]);
+        }
+
+        free(row_pointers);
+        return 0;
+    }
+
+    for (uint32_t row = 0; row < height; ++row)
+    {
+        memcpy((uint8_t *)staging_buffer_data + row * width * 4, row_pointers[row], width * 4);
+    }
+
+    vkUnmapMemory(window->context->logical_device, staging_buffer_memory);
+
+    VkImageCreateInfo image_creation_information = {};
+    image_creation_information.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    image_creation_information.imageType = VK_IMAGE_TYPE_2D;
+    image_creation_information.extent.width = (uint32_t)width;
+    image_creation_information.extent.height = (uint32_t)height;
+    image_creation_information.extent.depth = 1;
+    image_creation_information.mipLevels = 1;
+    image_creation_information.arrayLayers = 1;
+    image_creation_information.format = VK_FORMAT_R8G8B8A8_SRGB;
+    image_creation_information.tiling = VK_IMAGE_TILING_OPTIMAL;
+    image_creation_information.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    image_creation_information.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+    image_creation_information.samples = VK_SAMPLE_COUNT_1_BIT;
+    image_creation_information.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    image_creation_information.flags = 0;
+
+    result = vkCreateImage(window->context->logical_device, &image_creation_information, NULL, texture_image);
+    if (result != VK_SUCCESS)
+    {
+        log_error("Failed to create Vulkan image: %s", string_VkResult(result));
+        vkDestroyBuffer(window->context->logical_device, staging_buffer, NULL);
+        vkFreeMemory(window->context->logical_device, staging_buffer_memory, NULL);
+        for (uint32_t row = 0; row < height; ++row)
+        {
+            free(row_pointers[row]);
+        }
+
+        free(row_pointers);
+        return 0;
+    }
+
+    VkMemoryRequirements image_memory_requirements;
+    vkGetImageMemoryRequirements(window->context->logical_device, *texture_image, &image_memory_requirements);
+
+    if
+    (
+        memory_allocate
+        (
+            window, image_memory_requirements, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, texture_image_memory
+        ) == 0
+    )
+    {
+        log_error("Failed to allocate memory for image");
+        vkDestroyBuffer(window->context->logical_device, staging_buffer, NULL);
+        vkFreeMemory(window->context->logical_device, staging_buffer_memory, NULL);
+        for (uint32_t row = 0; row < height; ++row)
+        {
+            free(row_pointers[row]);
+        }
+
+        free(row_pointers);
+        return 0;
+    }
+
+    result = vkBindImageMemory(window->context->logical_device, *texture_image, *texture_image_memory, 0);
+    if (result != VK_SUCCESS)
+    {
+        log_error("Failed to bind image memory: %s", string_VkResult(result));
+        vkDestroyBuffer(window->context->logical_device, staging_buffer, NULL);
+        vkFreeMemory(window->context->logical_device, staging_buffer_memory, NULL);
+        for (uint32_t row = 0; row < height; ++row)
+        {
+            free(row_pointers[row]);
+        }
+
+        free(row_pointers);
+        return 0;
+    }
+
+    if
+    (
+        image_layout_transition
+        (
+            window, *texture_image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED,
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
+        ) == 0
+    )
+    {
+        log_error("Failed to transition image layout");
+        vkDestroyBuffer(window->context->logical_device, staging_buffer, NULL);
+        vkFreeMemory(window->context->logical_device, staging_buffer_memory, NULL);
+        for (uint32_t row = 0; row < height; ++row)
+        {
+            free(row_pointers[row]);
+        }
+
+        free(row_pointers);
+        return 0;
+    }
+
+    if (buffer_copy_to_image(window, staging_buffer, *texture_image, (uint32_t)width, (uint32_t)height) == 0)
+    {
+        log_error("Failed to copy buffer to image");
+        vkDestroyBuffer(window->context->logical_device, staging_buffer, NULL);
+        vkFreeMemory(window->context->logical_device, staging_buffer_memory, NULL);
+        for (uint32_t row = 0; row < height; ++row)
+        {
+            free(row_pointers[row]);
+        }
+
+        free(row_pointers);
+        return 0;
+    }
+
+    if
+    (
+        image_layout_transition
+        (
+            window, *texture_image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+        ) == 0
+    )
+    {
+        log_error("Failed to transition image layout");
+        vkDestroyBuffer(window->context->logical_device, staging_buffer, NULL);
+        vkFreeMemory(window->context->logical_device, staging_buffer_memory, NULL);
+        for (uint32_t row = 0; row < height; ++row)
+        {
+            free(row_pointers[row]);
+        }
+
+        free(row_pointers);
+        return 0;
+    }
+
+    vkDestroyBuffer(window->context->logical_device, staging_buffer, NULL);
+    vkFreeMemory(window->context->logical_device, staging_buffer_memory, NULL);
+
+    for (uint32_t row = 0; row < height; ++row)
+    {
+        free(row_pointers[row]);
+    }
+
+    free(row_pointers);
+    return 1;
+}
+
+static inline int image_layout_transition
+(
+    Window *window, VkImage image, VkFormat format, VkImageLayout previous_image_layout,
+    VkImageLayout next_image_layout
+)
+{
+    VkCommandBuffer command_buffer;
+    if (command_start(window, &command_buffer) == 0)
+    {
+        log_error("Failed to start single time command buffer");
+        return 0;
+    }
+
+    VkImageMemoryBarrier image_memory_barrier = {};
+    image_memory_barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    image_memory_barrier.oldLayout = previous_image_layout;
+    image_memory_barrier.newLayout = next_image_layout;
+    image_memory_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    image_memory_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    image_memory_barrier.image = image;
+    image_memory_barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    image_memory_barrier.subresourceRange.baseMipLevel = 0;
+    image_memory_barrier.subresourceRange.levelCount = 1;
+    image_memory_barrier.subresourceRange.baseArrayLayer = 0;
+    image_memory_barrier.subresourceRange.layerCount = 1;
+
+    VkPipelineStageFlags source_stages;
+    VkPipelineStageFlags destination_stages;
+
+    if
+    (
+        previous_image_layout == VK_IMAGE_LAYOUT_UNDEFINED &&
+        next_image_layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
+    )
+    {
+        image_memory_barrier.srcAccessMask = 0;
+        image_memory_barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+
+        source_stages = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+        destination_stages = VK_PIPELINE_STAGE_TRANSFER_BIT;
+    }
+    else if
+    (
+        previous_image_layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
+        next_image_layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    )
+    {
+        image_memory_barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        image_memory_barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+        source_stages = VK_PIPELINE_STAGE_TRANSFER_BIT;
+        destination_stages = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    }
+    else
+    {
+        log_error
+        (
+            "Unsupported image layout transition from '%s' to '%s'", string_VkImageLayout(previous_image_layout),
+            string_VkImageLayout(next_image_layout)
+        );
+
+        command_finish(window, command_buffer);
+        return 0;
+    }
+
+    vkCmdPipelineBarrier
+    (
+        command_buffer, source_stages, destination_stages, 0, 0, NULL, 0, NULL, 1, &image_memory_barrier
+    );
+
+    if (command_finish(window, command_buffer) == 0)
+    {
+        log_error("Failed to finish single time command buffer");
+        return 0;
+    }
+
+    return 1;
+}
+
+static inline int buffer_copy_to_image(Window *window, VkBuffer buffer, VkImage image, uint32_t width, uint32_t height)
+{
+    VkCommandBuffer command_buffer;
+    if (command_start(window, &command_buffer) == 0)
+    {
+        log_error("Failed to start single time command buffer");
+        return 0;
+    }
+
+    VkBufferImageCopy buffer_image_copy_region = {};
+    buffer_image_copy_region.bufferOffset = 0;
+    buffer_image_copy_region.bufferRowLength = 0;
+    buffer_image_copy_region.bufferImageHeight = 0;
+    buffer_image_copy_region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    buffer_image_copy_region.imageSubresource.mipLevel = 0;
+    buffer_image_copy_region.imageSubresource.baseArrayLayer = 0;
+    buffer_image_copy_region.imageSubresource.layerCount = 1;
+    buffer_image_copy_region.imageOffset.x = 0;
+    buffer_image_copy_region.imageOffset.y = 0;
+    buffer_image_copy_region.imageOffset.z = 0;
+    buffer_image_copy_region.imageExtent.width = width;
+    buffer_image_copy_region.imageExtent.height = height;
+    buffer_image_copy_region.imageExtent.depth = 1;
+
+    vkCmdCopyBufferToImage
+    (
+        command_buffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &buffer_image_copy_region
+    );
+
+    if (command_finish(window, command_buffer) == 0)
+    {
+        log_error("Failed to finish single time command buffer");
         return 0;
     }
 
