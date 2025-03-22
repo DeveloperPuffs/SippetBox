@@ -1196,17 +1196,35 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
     // Descriptor Set Layout Creation
     /*****************************************************************************************************************/
 
-    VkDescriptorSetLayoutBinding uniform_buffer_object_layout_binding = {};
-    uniform_buffer_object_layout_binding.binding = 0;
-    uniform_buffer_object_layout_binding.descriptorCount = 1;
-    uniform_buffer_object_layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    uniform_buffer_object_layout_binding.pImmutableSamplers = NULL;
-    uniform_buffer_object_layout_binding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    VkDescriptorSetLayoutBinding uniform_buffer_object_descriptor_set_layout_binding = {};
+    uniform_buffer_object_descriptor_set_layout_binding.binding = 0;
+    uniform_buffer_object_descriptor_set_layout_binding.descriptorCount = 1;
+    uniform_buffer_object_descriptor_set_layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    uniform_buffer_object_descriptor_set_layout_binding.pImmutableSamplers = NULL;
+    uniform_buffer_object_descriptor_set_layout_binding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+    VkDescriptorSetLayoutBinding sampler_descriptor_set_layout_binding = {};
+    sampler_descriptor_set_layout_binding.binding = 1;
+    sampler_descriptor_set_layout_binding.descriptorCount = 1;
+    sampler_descriptor_set_layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    sampler_descriptor_set_layout_binding.pImmutableSamplers = NULL;
+    sampler_descriptor_set_layout_binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+    const VkDescriptorSetLayoutBinding descriptor_set_layout_bindings[] =
+    {
+        uniform_buffer_object_descriptor_set_layout_binding,
+        sampler_descriptor_set_layout_binding
+    };
+
+    const size_t descriptor_set_layout_binding_count =
+    (
+        sizeof(descriptor_set_layout_bindings) / sizeof(descriptor_set_layout_bindings[0])
+    );
 
     VkDescriptorSetLayoutCreateInfo descriptor_set_layout_creation_information = {};
     descriptor_set_layout_creation_information.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    descriptor_set_layout_creation_information.pBindings = &uniform_buffer_object_layout_binding;
-    descriptor_set_layout_creation_information.bindingCount = 1;
+    descriptor_set_layout_creation_information.pBindings = descriptor_set_layout_bindings;
+    descriptor_set_layout_creation_information.bindingCount = descriptor_set_layout_binding_count;
 
     result = vkCreateDescriptorSetLayout
     (
@@ -1738,15 +1756,17 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
     // Descriptor Pool Creation
     /*****************************************************************************************************************/
 
-    VkDescriptorPoolSize descriptor_pool_size = {};
-    descriptor_pool_size.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    descriptor_pool_size.descriptorCount = (uint32_t)window->maximum_frames_in_flight;
+    VkDescriptorPoolSize descriptor_pool_sizes[2];
+    descriptor_pool_sizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    descriptor_pool_sizes[0].descriptorCount = (uint32_t)window->maximum_frames_in_flight;
+    descriptor_pool_sizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    descriptor_pool_sizes[1].descriptorCount = (uint32_t)window->maximum_frames_in_flight;
 
     VkDescriptorPoolCreateInfo descriptor_pool_creation_information = {};
     descriptor_pool_creation_information.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
     descriptor_pool_creation_information.maxSets = (uint16_t)window->maximum_frames_in_flight;
-    descriptor_pool_creation_information.pPoolSizes = &descriptor_pool_size;
-    descriptor_pool_creation_information.poolSizeCount = 1;
+    descriptor_pool_creation_information.pPoolSizes = descriptor_pool_sizes;
+    descriptor_pool_creation_information.poolSizeCount = 2;
 
     result = vkCreateDescriptorPool
     (
@@ -1815,16 +1835,33 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
         descriptor_buffer_information.buffer = window->uniform_buffers[descriptor_set_index];
         descriptor_buffer_information.offset = 0;
 
-        VkWriteDescriptorSet write_descriptor_set = {};
-        write_descriptor_set.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        write_descriptor_set.dstSet = window->descriptor_sets[descriptor_set_index];
-        write_descriptor_set.dstBinding = 0;
-        write_descriptor_set.dstArrayElement = 0;
-        write_descriptor_set.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        write_descriptor_set.descriptorCount = 1;
-        write_descriptor_set.pBufferInfo = &descriptor_buffer_information;
+        VkDescriptorImageInfo descriptor_image_information = {};
+        descriptor_image_information.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        descriptor_image_information.imageView = window->texture_image_view;
+        descriptor_image_information.sampler = window->texture_sampler;
 
-        vkUpdateDescriptorSets(logical_device, 1, &write_descriptor_set, 0, NULL);
+        VkDescriptorSet descriptor_set = window->descriptor_sets[descriptor_set_index];
+        VkWriteDescriptorSet write_descriptor_sets[2];
+
+        write_descriptor_sets[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        write_descriptor_sets[0].dstSet = descriptor_set;
+        write_descriptor_sets[0].dstBinding = 0;
+        write_descriptor_sets[0].dstArrayElement = 0;
+        write_descriptor_sets[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        write_descriptor_sets[0].descriptorCount = 1;
+        write_descriptor_sets[0].pBufferInfo = &descriptor_buffer_information;
+        write_descriptor_sets[0].pNext = NULL;
+
+        write_descriptor_sets[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        write_descriptor_sets[1].dstSet = descriptor_set;
+        write_descriptor_sets[1].dstBinding = 1;
+        write_descriptor_sets[1].dstArrayElement = 0;
+        write_descriptor_sets[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        write_descriptor_sets[1].descriptorCount = 1;
+        write_descriptor_sets[1].pImageInfo = &descriptor_image_information;
+        write_descriptor_sets[1].pNext = NULL;
+
+        vkUpdateDescriptorSets(logical_device, 2, write_descriptor_sets, 0, NULL);
     }
 
     /*****************************************************************************************************************/
