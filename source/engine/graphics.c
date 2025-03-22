@@ -53,6 +53,8 @@ typedef struct Window
     VkCommandBuffer *command_buffers;
     VkImage texture_image;
     VkDeviceMemory texture_image_memory;
+    VkImageView texture_image_view;
+    VkSampler texture_sampler;
     VkBuffer vertex_buffer;
     VkDeviceMemory vertex_buffer_memory;
     VkBuffer index_buffer;
@@ -1194,16 +1196,16 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
     // Descriptor Set Layout Creation
     /*****************************************************************************************************************/
 
-    VkDescriptorSetLayoutBinding uniform_object_buffer_layout_binding = {};
-    uniform_object_buffer_layout_binding.binding = 0;
-    uniform_object_buffer_layout_binding.descriptorCount = 1;
-    uniform_object_buffer_layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    uniform_object_buffer_layout_binding.pImmutableSamplers = NULL;
-    uniform_object_buffer_layout_binding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    VkDescriptorSetLayoutBinding uniform_buffer_object_layout_binding = {};
+    uniform_buffer_object_layout_binding.binding = 0;
+    uniform_buffer_object_layout_binding.descriptorCount = 1;
+    uniform_buffer_object_layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    uniform_buffer_object_layout_binding.pImmutableSamplers = NULL;
+    uniform_buffer_object_layout_binding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
     VkDescriptorSetLayoutCreateInfo descriptor_set_layout_creation_information = {};
     descriptor_set_layout_creation_information.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    descriptor_set_layout_creation_information.pBindings = &uniform_object_buffer_layout_binding;
+    descriptor_set_layout_creation_information.pBindings = &uniform_buffer_object_layout_binding;
     descriptor_set_layout_creation_information.bindingCount = 1;
 
     result = vkCreateDescriptorSetLayout
@@ -1473,15 +1475,55 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
     // Texture Image Creation
     /*****************************************************************************************************************/
 
-    if
-    (
-        image_load
-        (
-            window, "resources/images/textures/Texture.png", &window->texture_image, &window->texture_image_memory
-        ) == 0
-    )
+    const char *image_file_path = "resources/images/textures/Texture.png";
+    if (image_load(window, image_file_path, &window->texture_image, &window->texture_image_memory) == 0)
     {
         log_error("Failed to load texture image");
+        window_destroy(window);
+        return NULL;
+    }
+
+    VkImageViewCreateInfo image_view_creation_information = {};
+    image_view_creation_information.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    image_view_creation_information.image = window->texture_image;
+    image_view_creation_information.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    image_view_creation_information.format = VK_FORMAT_R8G8B8A8_SRGB;
+    image_view_creation_information.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    image_view_creation_information.subresourceRange.baseMipLevel = 0;
+    image_view_creation_information.subresourceRange.levelCount = 1;
+    image_view_creation_information.subresourceRange.baseArrayLayer = 0;
+    image_view_creation_information.subresourceRange.layerCount = 1;
+
+    result = vkCreateImageView(logical_device, &image_view_creation_information, NULL, &window->texture_image_view);
+    if (result != VK_SUCCESS)
+    {
+        log_error("Failed to create texture image view: %s", string_VkResult(result));
+        window_destroy(window);
+        return NULL;
+    }
+
+    VkSamplerCreateInfo sampler_creation_information = {};
+    sampler_creation_information.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    sampler_creation_information.magFilter = VK_FILTER_LINEAR;
+    sampler_creation_information.minFilter = VK_FILTER_LINEAR;
+    sampler_creation_information.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    sampler_creation_information.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    sampler_creation_information.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    sampler_creation_information.anisotropyEnable = VK_FALSE;
+    sampler_creation_information.maxAnisotropy = 1.0f;
+    sampler_creation_information.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+    sampler_creation_information.unnormalizedCoordinates = VK_FALSE;
+    sampler_creation_information.compareEnable = VK_FALSE;
+    sampler_creation_information.compareOp = VK_COMPARE_OP_ALWAYS;
+    sampler_creation_information.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+    sampler_creation_information.mipLodBias = 0.0f;
+    sampler_creation_information.minLod = 0.0f;
+    sampler_creation_information.maxLod = 0.0f;
+
+    result = vkCreateSampler(logical_device, &sampler_creation_information, NULL, &window->texture_sampler);
+    if (result != VK_SUCCESS)
+    {
+        log_error("Failed to create texture sampler: %s", string_VkResult(result));
         window_destroy(window);
         return NULL;
     }
@@ -2082,6 +2124,8 @@ void window_destroy(Window *window)
     vkDestroyBuffer(logical_device, window->vertex_buffer, NULL);
     vkFreeMemory(logical_device, window->vertex_buffer_memory, NULL);
 
+    vkDestroySampler(logical_device, window->texture_sampler, NULL);
+    vkDestroyImageView(logical_device, window->texture_image_view, NULL);
     vkDestroyImage(logical_device, window->texture_image, NULL);
     vkFreeMemory(logical_device, window->texture_image_memory, NULL);
 
