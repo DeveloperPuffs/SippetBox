@@ -79,8 +79,9 @@ typedef struct UniformBufferObject
     float projection[4][4];
 } UniformBufferObject;
 
-/*
+/* Triangle with Colors:
 static const int vertex_count = 3;
+static const int vertex_size = 5;
 static const float vertices[] =
 {
     0.0f, -0.5f, 1.0f, 0.0f, 0.0f,
@@ -89,13 +90,27 @@ static const float vertices[] =
 };
 */
 
+/* Rectangle with Colors:
 static const int vertex_count = 4;
+static const int vertex_size = 5;
 static const float vertices[] =
 {
     -0.5f, -0.5f, 1.0f, 0.0f, 0.0f,
     0.5f, -0.5f, 0.0f, 1.0f, 0.0f,
     0.5f, 0.5f, 0.0f, 0.0f, 1.0f,
     -0.5f, 0.5f, 1.0f, 1.0f, 1.0f
+};
+*/
+
+// Rectangle with Texture:
+static const int vertex_count = 4;
+static const int vertex_size = 7;
+static const float vertices[] =
+{
+    -0.5f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f,
+    0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f,
+    0.5f, 0.5f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f,
+    -0.5f, 0.5f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f
 };
 
 static const int index_count = 6;
@@ -1286,13 +1301,13 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
 
     VkVertexInputBindingDescription vertex_input_binding_description = {};
     vertex_input_binding_description.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-    vertex_input_binding_description.stride = 5 * sizeof(float);
+    vertex_input_binding_description.stride = vertex_size * sizeof(float);
     vertex_input_binding_description.binding = 0;
 
     vertex_input_state_creation_information.pVertexBindingDescriptions = &vertex_input_binding_description;
     vertex_input_state_creation_information.vertexBindingDescriptionCount = 1;
 
-    VkVertexInputAttributeDescription vertex_input_attribute_descriptions[2] = {};
+    VkVertexInputAttributeDescription vertex_input_attribute_descriptions[3] = {};
 
     // Represents the position of the vertex
     vertex_input_attribute_descriptions[0].location = 0;
@@ -1305,9 +1320,15 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
     vertex_input_attribute_descriptions[1].binding = 0;
     vertex_input_attribute_descriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
     vertex_input_attribute_descriptions[1].offset = 2 * sizeof(float);
-    
+
+    // Represents the position of the texture (how it is mapped onto the geometry)
+    vertex_input_attribute_descriptions[2].location = 2;
+    vertex_input_attribute_descriptions[2].binding = 0;
+    vertex_input_attribute_descriptions[2].format = VK_FORMAT_R32G32_SFLOAT;
+    vertex_input_attribute_descriptions[2].offset = (2 + 3) * sizeof(float);
+
     vertex_input_state_creation_information.pVertexAttributeDescriptions = vertex_input_attribute_descriptions;
-    vertex_input_state_creation_information.vertexAttributeDescriptionCount = 2;
+    vertex_input_state_creation_information.vertexAttributeDescriptionCount = 3;
 
     VkPipelineInputAssemblyStateCreateInfo input_assembly_state_creation_information = {};
     input_assembly_state_creation_information.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
@@ -1493,7 +1514,7 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
     // Texture Image Creation
     /*****************************************************************************************************************/
 
-    const char *image_file_path = "resources/images/textures/Texture.png";
+    const char *image_file_path = "resources/images/textures/four_squares.png";
     if (image_load(window, image_file_path, &window->texture_image, &window->texture_image_memory) == 0)
     {
         log_error("Failed to load texture image");
@@ -1550,7 +1571,7 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
     // Vertex Buffer Creation
     /*****************************************************************************************************************/
 
-    VkDeviceSize vertex_buffer_size = 5 * vertex_count * sizeof(float);
+    VkDeviceSize vertex_buffer_size = vertex_size * vertex_count * sizeof(float);
     
     VkBuffer vertex_staging_buffer;
     VkDeviceMemory vertex_staging_buffer_memory;
