@@ -79,38 +79,14 @@ typedef struct UniformBufferObject
     float projection[4][4];
 } UniformBufferObject;
 
-/* Triangle with Colors:
-static const int vertex_count = 3;
-static const int vertex_size = 5;
-static const float vertices[] =
-{
-    0.0f, -0.5f, 1.0f, 0.0f, 0.0f,
-    0.5f, 0.5f, 0.0f, 1.0f, 0.0f,
-    -0.5f, 0.5f, 0.0f, 0.0f, 1.0f
-};
-*/
-
-/* Rectangle with Colors:
 static const int vertex_count = 4;
-static const int vertex_size = 5;
+static const int vertex_size = 8;
 static const float vertices[] =
 {
-    -0.5f, -0.5f, 1.0f, 0.0f, 0.0f,
-    0.5f, -0.5f, 0.0f, 1.0f, 0.0f,
-    0.5f, 0.5f, 0.0f, 0.0f, 1.0f,
-    -0.5f, 0.5f, 1.0f, 1.0f, 1.0f
-};
-*/
-
-// Rectangle with Texture:
-static const int vertex_count = 4;
-static const int vertex_size = 7;
-static const float vertices[] =
-{
-    -0.5f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f,
-    0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f,
-    0.5f, 0.5f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f,
-    -0.5f, 0.5f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f
+    -0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f,
+    0.5f, -0.5f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f,
+    0.5f, 0.5f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f,
+    -0.5f, 0.5f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f
 };
 
 static const int index_count = 6;
@@ -1319,13 +1295,13 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
     vertex_input_attribute_descriptions[1].location = 1;
     vertex_input_attribute_descriptions[1].binding = 0;
     vertex_input_attribute_descriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
-    vertex_input_attribute_descriptions[1].offset = 2 * sizeof(float);
+    vertex_input_attribute_descriptions[1].offset = 3 * sizeof(float);
 
     // Represents the position of the texture (how it is mapped onto the geometry)
     vertex_input_attribute_descriptions[2].location = 2;
     vertex_input_attribute_descriptions[2].binding = 0;
     vertex_input_attribute_descriptions[2].format = VK_FORMAT_R32G32_SFLOAT;
-    vertex_input_attribute_descriptions[2].offset = (2 + 3) * sizeof(float);
+    vertex_input_attribute_descriptions[2].offset = (3 + 3) * sizeof(float);
 
     vertex_input_state_creation_information.pVertexAttributeDescriptions = vertex_input_attribute_descriptions;
     vertex_input_state_creation_information.vertexAttributeDescriptionCount = 3;
