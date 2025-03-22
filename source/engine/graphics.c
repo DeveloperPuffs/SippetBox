@@ -2,13 +2,13 @@
 #include <string.h>
 #include <time.h>
 
-#include <png.h>
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
 #include <vulkan/vulkan.h>
 #include <vulkan/vk_enum_string_helper.h>
 
 #include <engine/math.h>
+#include <engine/files.h>
 #include <engine/platform.h>
 #include <engine/logging.h>
 
@@ -112,11 +112,11 @@ static inline VkBool32 vulkan_debug_messenger_callback
     const VkDebugUtilsMessengerCallbackDataEXT* callback_data, void* user_data
 );
 
-static inline uint32_t rate_physical_device_properties(VkPhysicalDevice physical_device);
-static inline uint32_t rate_physical_device_features(VkPhysicalDevice physical_device);
-static inline uint32_t rate_physical_device_memory(VkPhysicalDevice physical_device);
-static inline uint32_t rate_physical_device_queue_families(VkPhysicalDevice physical_device);
-static inline uint32_t rate_physical_device_extensions(VkPhysicalDevice physical_device);
+static uint32_t rate_physical_device_properties(VkPhysicalDevice physical_device);
+static uint32_t rate_physical_device_features(VkPhysicalDevice physical_device);
+static uint32_t rate_physical_device_memory(VkPhysicalDevice physical_device);
+static uint32_t rate_physical_device_queue_families(VkPhysicalDevice physical_device);
+static uint32_t rate_physical_device_extensions(VkPhysicalDevice physical_device);
 
 /*********************************************************************************************************************/
 // Context Creation Function
@@ -125,8 +125,8 @@ static inline uint32_t rate_physical_device_extensions(VkPhysicalDevice physical
 Context *context_create()
 {
     VkResult result;
-    
-    Context *context = (Context *)calloc(1, sizeof(Context));
+
+    Context *context = calloc(1, sizeof(Context));
     if (context == NULL)
     {
         log_error("Failed to allocate memory for context instance");
@@ -673,7 +673,7 @@ static inline VkBool32 vulkan_debug_messenger_callback
 // Physical Device Criteria
 /*********************************************************************************************************************/
 
-static inline uint32_t rate_physical_device_properties(VkPhysicalDevice physical_device)
+static uint32_t rate_physical_device_properties(VkPhysicalDevice physical_device)
 {
     uint32_t score = 0;
 
@@ -700,7 +700,7 @@ static inline uint32_t rate_physical_device_properties(VkPhysicalDevice physical
     return score;
 }
 
-static inline uint32_t rate_physical_device_features(VkPhysicalDevice physical_device)
+static uint32_t rate_physical_device_features(VkPhysicalDevice physical_device)
 {
     uint32_t score = 0;
 
@@ -720,7 +720,7 @@ static inline uint32_t rate_physical_device_features(VkPhysicalDevice physical_d
     return score;
 }
 
-static inline uint32_t rate_physical_device_memory(VkPhysicalDevice physical_device)
+static uint32_t rate_physical_device_memory(VkPhysicalDevice physical_device)
 {
     uint32_t score = 0;
 
@@ -741,7 +741,7 @@ static inline uint32_t rate_physical_device_memory(VkPhysicalDevice physical_dev
     return total_memory / 10;
 }
 
-static inline uint32_t rate_physical_device_queue_families(VkPhysicalDevice physical_device)
+static uint32_t rate_physical_device_queue_families(VkPhysicalDevice physical_device)
 {
     uint32_t score = 0;
 
@@ -780,7 +780,7 @@ static inline uint32_t rate_physical_device_queue_families(VkPhysicalDevice phys
     return score;
 }
 
-static inline uint32_t rate_physical_device_extensions(VkPhysicalDevice physical_device)
+static uint32_t rate_physical_device_extensions(VkPhysicalDevice physical_device)
 {
     VkResult result;
     uint32_t score = 0;
@@ -846,7 +846,7 @@ static inline int buffer_copy
     Window *window, VkBuffer source_buffer, VkBuffer destination_buffer, VkDeviceSize buffer_size
 );
 
-static inline int image_png_load
+static inline int image_load
 (
     Window *window, const char *file_path, VkImage *texture_image, VkDeviceMemory *texture_image_memory
 );
@@ -865,7 +865,7 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
         return NULL;
     }
 
-    Window *window = (Window *)calloc(1, sizeof(Window));
+    Window *window = calloc(1, sizeof(Window));
     if (window == NULL)
     {
         log_error("Failed to allocate memory for window instance");
@@ -936,10 +936,7 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
         return NULL;
     }
 
-    VkSurfaceFormatKHR *surface_formats =
-    (
-        (VkSurfaceFormatKHR *)malloc(surface_format_count * sizeof(VkSurfaceFormatKHR))
-    );
+    VkSurfaceFormatKHR *surface_formats = malloc(surface_format_count * sizeof(VkSurfaceFormatKHR));
 
     if (surface_formats == NULL)
     {
@@ -1044,7 +1041,7 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
         return NULL;
     }
 
-    window->images = (VkImage *)calloc(window->image_count, sizeof(VkImage));
+    window->images = calloc(window->image_count, sizeof(VkImage));
     if (window->images == NULL)
     {
         log_error("Failed to allocate memory for swapchain images");
@@ -1064,7 +1061,7 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
     // Image Views Creation
     /*****************************************************************************************************************/
 
-    window->image_views = (VkImageView *)calloc(window->image_count, sizeof(VkImageView));
+    window->image_views = calloc(window->image_count, sizeof(VkImageView));
     if (window->image_views == NULL)
     {
         log_error("Failed to allocate memory for image views");
@@ -1161,7 +1158,7 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
     };
 
     window->shader_module_count = sizeof(shader_file_paths) / sizeof(shader_file_paths[0]);
-    window->shader_modules = (VkShaderModule *)calloc(window->shader_module_count, sizeof(VkShaderModule));
+    window->shader_modules = calloc(window->shader_module_count, sizeof(VkShaderModule));
     for (size_t shader_module_index = 0; shader_module_index < window->shader_module_count; ++shader_module_index)
     {
         const char *shader_file_path = shader_file_paths[shader_module_index];
@@ -1207,7 +1204,7 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
             return NULL;
         }
 
-        uint32_t *buffer = (uint32_t *)malloc(size);
+        uint32_t *buffer = malloc(size);
         if (buffer == NULL)
         {
             fclose(file);
@@ -1444,7 +1441,7 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
     // Framebuffers Creation
     /*****************************************************************************************************************/
 
-    window->framebuffers = (VkFramebuffer *)calloc(window->image_count, sizeof(VkFramebuffer));
+    window->framebuffers = calloc(window->image_count, sizeof(VkFramebuffer));
     if (window->framebuffers == NULL)
     {
         log_error("Failed to allocate memory for framebuffers");
@@ -1506,7 +1503,7 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
     command_buffer_allocation_information.commandPool = window->command_pool;
     command_buffer_allocation_information.commandBufferCount = window->maximum_frames_in_flight;
 
-    window->command_buffers = (VkCommandBuffer *)calloc(window->maximum_frames_in_flight, sizeof(VkCommandBuffer));
+    window->command_buffers = calloc(window->maximum_frames_in_flight, sizeof(VkCommandBuffer));
     if (window->command_buffers == NULL)
     {
         log_error("Failed to allocate memory for command buffers");
@@ -1532,7 +1529,7 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
 
     if
     (
-        image_png_load
+        image_load
         (
             window, "resources/images/textures/Texture.png", &window->texture_image, &window->texture_image_memory
         ) == 0
@@ -1690,7 +1687,7 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
     uint32_t uniform_buffer_count = window->maximum_frames_in_flight;
     VkDeviceSize uniform_buffer_size = sizeof(UniformBufferObject);
 
-    window->uniform_buffers = (VkBuffer *)calloc(uniform_buffer_count, sizeof(VkBuffer));
+    window->uniform_buffers = calloc(uniform_buffer_count, sizeof(VkBuffer));
     if (window->uniform_buffers == NULL)
     {
         log_error("Failed to allocate memory for uniform buffers");
@@ -1698,7 +1695,7 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
         return NULL;
     }
     
-    window->uniform_buffers_memory = (VkDeviceMemory *)calloc(uniform_buffer_count, sizeof(VkDeviceMemory));
+    window->uniform_buffers_memory = calloc(uniform_buffer_count, sizeof(VkDeviceMemory));
     if (window->uniform_buffers_memory == NULL)
     {
         log_error("Failed to allocate memory for uniform buffers memory");
@@ -1706,7 +1703,7 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
         return NULL;
     }
 
-    window->uniform_buffers_mapped = (void **)calloc(uniform_buffer_count, sizeof(void *));
+    window->uniform_buffers_mapped = calloc(uniform_buffer_count, sizeof(void *));
     if (window->uniform_buffers_mapped == NULL)
     {
         log_error("Failed to allocate memory for uniform buffers mapped");
@@ -1802,7 +1799,7 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
 
     descriptor_set_allocation_information.pSetLayouts = descriptor_set_layouts;
 
-    window->descriptor_sets = (VkDescriptorSet *)calloc(window->maximum_frames_in_flight, sizeof(VkDescriptorSet));
+    window->descriptor_sets = calloc(window->maximum_frames_in_flight, sizeof(VkDescriptorSet));
     if (window->descriptor_sets == NULL)
     {
         log_error("Failed to allocate memory for descriptor sets");
@@ -1846,7 +1843,7 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
     // Synchronization Objects Creation
     /*****************************************************************************************************************/
 
-    window->image_available_semaphores = (VkSemaphore *)calloc(window->maximum_frames_in_flight, sizeof(VkSemaphore));
+    window->image_available_semaphores = calloc(window->maximum_frames_in_flight, sizeof(VkSemaphore));
     if (window->image_available_semaphores == NULL)
     {
         log_error("Failed to allocate memory for image available semaphores");
@@ -1854,7 +1851,7 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
         return NULL;
     }
 
-    window->render_finished_semaphores = (VkSemaphore *)calloc(window->maximum_frames_in_flight, sizeof(VkSemaphore));
+    window->render_finished_semaphores = calloc(window->maximum_frames_in_flight, sizeof(VkSemaphore));
     if (window->render_finished_semaphores == NULL)
     {
         log_error("Failed to allocate memory for render finished semaphores");
@@ -1862,7 +1859,7 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
         return NULL;
     }
 
-    window->in_flight_fences = (VkFence *)calloc(window->maximum_frames_in_flight, sizeof(VkFence));
+    window->in_flight_fences = calloc(window->maximum_frames_in_flight, sizeof(VkFence));
     if (window->in_flight_fences == NULL)
     {
         log_error("Failed to allocate memory for in flight fences");
@@ -2405,112 +2402,21 @@ static inline int buffer_copy_to_image
     Window *window, VkBuffer buffer, VkImage image, uint32_t width, uint32_t height
 );
 
-static inline int image_png_load
+static inline int image_load
 (
     Window *window, const char *file_path, VkImage *texture_image, VkDeviceMemory *texture_image_memory
 )
 {
     VkResult result;
 
-    FILE *file = fopen(file_path, "rb");
-    if (file == NULL)
+    Image *image = image_create(file_path);
+    if (image == NULL)
     {
-        log_error("Failed to open file with path: %s", file_path);
+        log_error("Failed to create image");
         return 0;
     }
 
-    png_structp png_reader = png_create_read_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
-    if (png_reader == NULL)
-    {
-        log_error("Failed to create PNG reader struct");
-        fclose(file);
-        return 0;
-    }
-
-    png_infop png_reader_information = png_create_info_struct(png_reader);
-    if (png_reader_information == NULL)
-    {
-        log_error("Failed to query PNG reader struct information");
-        fclose(file);
-        return 0;
-    }
-
-    if (setjmp(png_jmpbuf(png_reader)) != 0)
-    {
-        log_error("Failed to process PNG");
-        fclose(file);
-        return 0;
-    }
-
-    png_init_io(png_reader, file);
-    png_read_info(png_reader, png_reader_information);
-
-    uint32_t width = png_get_image_width(png_reader, png_reader_information);
-    uint32_t height = png_get_image_height(png_reader, png_reader_information);
-    int color_type = png_get_color_type(png_reader, png_reader_information);
-    int bit_depth = png_get_bit_depth(png_reader, png_reader_information);
-
-    if (bit_depth == 16)
-    {
-        png_set_strip_16(png_reader);
-    }
-    
-    if (color_type == PNG_COLOR_TYPE_PALETTE)
-    {
-        png_set_palette_to_rgb(png_reader);
-    }
-    
-    if (color_type == PNG_COLOR_TYPE_GRAY && bit_depth < 8)
-    {
-        png_set_expand_gray_1_2_4_to_8(png_reader);
-    }
-    
-    if (png_get_valid(png_reader, png_reader_information, PNG_INFO_tRNS) != 0)
-    {
-        png_set_tRNS_to_alpha(png_reader);
-    }
-    
-    if (color_type != PNG_COLOR_TYPE_RGBA)
-    {
-        png_set_filler(png_reader, 0xFF, PNG_FILLER_AFTER);
-    }
-
-    png_read_update_info(png_reader, png_reader_information);
-
-    png_bytep *row_pointers = malloc(height * sizeof(png_bytep));
-    if (row_pointers == NULL)
-    {
-        log_error("Failed to allocate memory for image rows");
-        fclose(file);
-        return 0;
-    }
-
-    for (uint32_t row = 0; row < height; ++row)
-    {
-        row_pointers[row] = malloc(png_get_rowbytes(png_reader, png_reader_information));
-        if (row_pointers[row] == NULL)
-        {
-            log_error("Failed to allocate memory for image column");
-            fclose(file);
-
-            if (row != 0)
-            {
-                // Loop over the allocated rows to free them one by one
-                for (uint32_t current_row = 0; current_row < row; ++current_row)
-                {
-                    free(row_pointers[current_row]);
-                }
-            }
-
-            return 0;
-        }
-    }
-
-    png_read_image(png_reader, row_pointers);
-    png_destroy_read_struct(&png_reader, &png_reader_information, NULL);
-    fclose(file);
-
-    VkDeviceSize image_size = width * height * 4;
+    VkDeviceSize image_size = 4 * image->width * image->height;
 
     VkBuffer staging_buffer;
     VkDeviceMemory staging_buffer_memory;
@@ -2526,12 +2432,7 @@ static inline int image_png_load
     )
     {
         log_error("Failed to create staging buffer for PNG image");
-        for (uint32_t row = 0; row < height; ++row)
-        {
-            free(row_pointers[row]);
-        }
-
-        free(row_pointers);
+        image_destroy(image);
         return 0;
     }
 
@@ -2545,18 +2446,13 @@ static inline int image_png_load
     {
         log_error("Failed to map staging buffer memory: %s", string_VkResult(result));
         vkDestroyBuffer(window->context->logical_device, staging_buffer, NULL);
-        for (uint32_t row = 0; row < height; ++row)
-        {
-            free(row_pointers[row]);
-        }
-
-        free(row_pointers);
+        image_destroy(image);
         return 0;
     }
 
-    for (uint32_t row = 0; row < height; ++row)
+    for (uint32_t row = 0; row < image->height; ++row)
     {
-        memcpy((uint8_t *)staging_buffer_data + row * width * 4, row_pointers[row], width * 4);
+        memcpy((uint8_t *)staging_buffer_data + row * image->width * 4, image->data[row], image->width * 4);
     }
 
     vkUnmapMemory(window->context->logical_device, staging_buffer_memory);
@@ -2564,8 +2460,8 @@ static inline int image_png_load
     VkImageCreateInfo image_creation_information = {};
     image_creation_information.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
     image_creation_information.imageType = VK_IMAGE_TYPE_2D;
-    image_creation_information.extent.width = (uint32_t)width;
-    image_creation_information.extent.height = (uint32_t)height;
+    image_creation_information.extent.width = (uint32_t)image->width;
+    image_creation_information.extent.height = (uint32_t)image->height;
     image_creation_information.extent.depth = 1;
     image_creation_information.mipLevels = 1;
     image_creation_information.arrayLayers = 1;
@@ -2583,12 +2479,7 @@ static inline int image_png_load
         log_error("Failed to create Vulkan image: %s", string_VkResult(result));
         vkDestroyBuffer(window->context->logical_device, staging_buffer, NULL);
         vkFreeMemory(window->context->logical_device, staging_buffer_memory, NULL);
-        for (uint32_t row = 0; row < height; ++row)
-        {
-            free(row_pointers[row]);
-        }
-
-        free(row_pointers);
+        image_destroy(image);
         return 0;
     }
 
@@ -2606,12 +2497,7 @@ static inline int image_png_load
         log_error("Failed to allocate memory for image");
         vkDestroyBuffer(window->context->logical_device, staging_buffer, NULL);
         vkFreeMemory(window->context->logical_device, staging_buffer_memory, NULL);
-        for (uint32_t row = 0; row < height; ++row)
-        {
-            free(row_pointers[row]);
-        }
-
-        free(row_pointers);
+        image_destroy(image);
         return 0;
     }
 
@@ -2621,12 +2507,7 @@ static inline int image_png_load
         log_error("Failed to bind image memory: %s", string_VkResult(result));
         vkDestroyBuffer(window->context->logical_device, staging_buffer, NULL);
         vkFreeMemory(window->context->logical_device, staging_buffer_memory, NULL);
-        for (uint32_t row = 0; row < height; ++row)
-        {
-            free(row_pointers[row]);
-        }
-
-        free(row_pointers);
+        image_destroy(image);
         return 0;
     }
 
@@ -2642,26 +2523,22 @@ static inline int image_png_load
         log_error("Failed to transition image layout");
         vkDestroyBuffer(window->context->logical_device, staging_buffer, NULL);
         vkFreeMemory(window->context->logical_device, staging_buffer_memory, NULL);
-        for (uint32_t row = 0; row < height; ++row)
-        {
-            free(row_pointers[row]);
-        }
-
-        free(row_pointers);
+        image_destroy(image);
         return 0;
     }
 
-    if (buffer_copy_to_image(window, staging_buffer, *texture_image, (uint32_t)width, (uint32_t)height) == 0)
+    if
+    (
+        buffer_copy_to_image
+        (
+            window, staging_buffer, *texture_image, (uint32_t)image->width, (uint32_t)image->height
+        ) == 0
+    )
     {
         log_error("Failed to copy buffer to image");
         vkDestroyBuffer(window->context->logical_device, staging_buffer, NULL);
         vkFreeMemory(window->context->logical_device, staging_buffer_memory, NULL);
-        for (uint32_t row = 0; row < height; ++row)
-        {
-            free(row_pointers[row]);
-        }
-
-        free(row_pointers);
+        image_destroy(image);
         return 0;
     }
 
@@ -2677,24 +2554,14 @@ static inline int image_png_load
         log_error("Failed to transition image layout");
         vkDestroyBuffer(window->context->logical_device, staging_buffer, NULL);
         vkFreeMemory(window->context->logical_device, staging_buffer_memory, NULL);
-        for (uint32_t row = 0; row < height; ++row)
-        {
-            free(row_pointers[row]);
-        }
-
-        free(row_pointers);
+        image_destroy(image);
         return 0;
     }
 
     vkDestroyBuffer(window->context->logical_device, staging_buffer, NULL);
     vkFreeMemory(window->context->logical_device, staging_buffer_memory, NULL);
+    image_destroy(image);
 
-    for (uint32_t row = 0; row < height; ++row)
-    {
-        free(row_pointers[row]);
-    }
-
-    free(row_pointers);
     return 1;
 }
 
