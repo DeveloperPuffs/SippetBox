@@ -23,7 +23,7 @@ Image *image_create(const char *const path)
     char *extension = (char *)malloc(extension_length * sizeof(char));
     if (extension == NULL)
     {
-        log_error("Failed to allocate memory for extension");
+        log_error("Failed to allocate memory for image extension string");
         return NULL;
     }
 
@@ -41,8 +41,12 @@ Image *image_create(const char *const path)
     if (image == NULL)
     {
         log_error("Failed to allocate memory for image instance");
+        if (fclose(file) != 0)
+        {
+            log_warning("Failed to close image: %s", path);
+        }
+
         free(extension);
-        fclose(file);
         return NULL;
     }
 
@@ -54,15 +58,22 @@ Image *image_create(const char *const path)
     else
     {
         log_error("Unsupported image extension '%s'", extension);
+        if (fclose(file) != 0)
+        {
+            log_warning("Failed to close image file: %s", path);
+        }
+
         image_destroy(image);
         free(extension);
-        fclose(file);
         return NULL;
     }
 
     free(extension);
     const unsigned char image_creation_result = image_creation_function(file, image);
-    fclose(file);
+    if (fclose(file) != 0)
+    {
+        log_warning("Failed to close image: %s", path);
+    }
 
     if (image_creation_result == 0)
     {
@@ -160,6 +171,11 @@ static unsigned char image_create_png(FILE *file, Image *image)
 
 void image_destroy(Image *const image)
 {
+    if (image == NULL)
+    {
+        return;
+    }
+
     for (unsigned int row = 0; row < image->height; ++row)
     {
         free(image->data[row]);
@@ -167,4 +183,119 @@ void image_destroy(Image *const image)
 
     free(image->data);
     free(image);
+}
+
+Shader *shader_create(const char *const path)
+{
+    FILE *file = fopen(path, "rb");
+    if (file == NULL)
+    {
+        log_error("Failed to open shader: %s", path);
+        return NULL;
+    }
+
+    Shader *shader = calloc(1, sizeof(Shader));
+    if (shader == NULL)
+    {
+        log_error("Failed to allocate memory for shader instance");
+        if (fclose(file) != 0)
+        {
+            log_warning("Failed to close shader: %s", path);
+        }
+
+        return NULL;
+    }
+
+    if (fseek(file, 0, SEEK_END) != 0)
+    {
+        log_error("Failed to seek to end of shader: %s", path);
+        if (fclose(file) != 0)
+        {
+            log_warning("Failed to close shader: %s", path);
+        }
+
+        shader_destroy(shader);
+        return NULL;
+    }
+
+    const long size = ftell(file);
+    if (size == -1L)
+    {
+        log_error("Failed to determine shader size: %s", path);
+        if (fclose(file) != 0)
+        {
+            log_warning("Failed to close shader: %s", path);
+        }
+
+        shader_destroy(shader);
+        return NULL;
+    }
+
+    if (size % 4 != 0)
+    {
+        log_error("Shader size (%d) is not aligned: %s", shader->size, path);
+        if (fclose(file) != 0)
+        {
+            log_warning("Failed to close shader: %s", path);
+        }
+
+        shader_destroy(shader);
+        return NULL;
+    }
+
+    if (fseek(file, 0, SEEK_SET) != 0)
+    {
+        log_error("Failed to rewind shader: %s", path);
+        if (fclose(file) != 0)
+        {
+            log_warning("Failed to close shader: %s", path);
+        }
+
+        shader_destroy(shader);
+        return NULL;
+    }
+
+    shader->size = (unsigned long)size;
+    shader->data = malloc(size);
+    if (shader->data == NULL)
+    {
+        log_error("Failed to allocate memory for shader data");
+        if (fclose(file) != 0)
+        {
+            log_warning("Failed to close shader: %s", path);
+        }
+
+        shader_destroy(shader);
+        return NULL;
+    }
+
+    if (fread(shader->data, 1, size, file) != size)
+    {
+        log_error("Failed to read shader: %s", path);
+        if (fclose(file) != 0)
+        {
+            log_warning("Failed to close shader: %s", path);
+        }
+
+        shader_destroy(shader);
+        return NULL;
+    }
+
+    if (fclose(file) != 0)
+    {
+        log_warning("Failed to close shader: %s", path);
+    }
+
+    return shader;
+}
+
+void shader_destroy(Shader *const shader)
+{
+    if (shader == NULL)
+    {
+        return;
+    }
+
+    free(shader->data);
+    free(shader);
 }

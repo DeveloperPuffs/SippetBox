@@ -1162,79 +1162,25 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
     for (size_t shader_module_index = 0; shader_module_index < window->shader_module_count; ++shader_module_index)
     {
         const char *shader_file_path = shader_file_paths[shader_module_index];
-
-        FILE *file = fopen(shader_file_path, "rb");
-        if (file == NULL)
+        Shader *shader = shader_create(shader_file_path);
+        if (shader == NULL)
         {
-            log_error("Failed to open shader file with path: %s", shader_file_path);
+            log_error("Failed to create shader: %s", shader_file_path);
             window_destroy(window);
             return NULL;
         }
-
-        if (fseek(file, 0, SEEK_END) != 0)
-        {
-            fclose(file);
-            log_error("Failed to seek to end of shader file with path: %s", shader_file_path);
-            window_destroy(window);
-            return NULL;
-        }
-
-        long size = ftell(file);
-        if (size == -1L)
-        {
-            fclose(file);
-            log_error("Failed to determine shader file size with path: %s", shader_file_path);
-            window_destroy(window);
-            return NULL;
-        }
-
-        if (fseek(file, 0, SEEK_SET) != 0)
-        {
-            fclose(file);
-            log_error("Failed to rewind shader file with path: %s", shader_file_path);
-            window_destroy(window);
-            return NULL;
-        }
-
-        if (size % 4 != 0)
-        {
-            fclose(file);
-            log_error("Shader file size is not aligned: %s", shader_file_path);
-            window_destroy(window);
-            return NULL;
-        }
-
-        uint32_t *buffer = malloc(size);
-        if (buffer == NULL)
-        {
-            fclose(file);
-            log_error("Failed to allocate memory for shader file buffer");
-            window_destroy(window);
-            return NULL;
-        }
-
-        if (fread(buffer, 1, size, file) != size)
-        {
-            free(buffer);
-            fclose(file);
-            log_error("Failed to read full shader file: %s", shader_file_path);
-            window_destroy(window);
-            return NULL;
-        }
-
-        fclose(file);
 
         VkShaderModuleCreateInfo shader_module_creation_information = {};
         shader_module_creation_information.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-        shader_module_creation_information.codeSize = size;
-        shader_module_creation_information.pCode = buffer;
+        shader_module_creation_information.codeSize = shader->size;
+        shader_module_creation_information.pCode = shader->data;
 
         result = vkCreateShaderModule
         (
             logical_device, &shader_module_creation_information, NULL, &window->shader_modules[shader_module_index]
         );
 
-        free(buffer);
+        shader_destroy(shader);
 
         if (result != VK_SUCCESS)
         {
