@@ -79,20 +79,26 @@ typedef struct UniformBufferObject
     float projection[4][4];
 } UniformBufferObject;
 
-static const int vertex_count = 4;
+static const int vertex_count = 8;
 static const int vertex_size = 8;
 static const float vertices[] =
 {
-    -0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f,
-    0.5f, -0.5f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f,
-    0.5f, 0.5f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f,
-    -0.5f, 0.5f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f
+    -0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+    0.5f, -0.5f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f,
+    0.5f, 0.5f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f,
+    -0.5f, 0.5f, 0.0f, 1.0f, 1.0f, 1.0f, 0.0f, 1.0f,
+
+    -0.5f, -0.5f, -0.5f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+    0.5f, -0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f,
+    0.5f, 0.5f, -0.5f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f,
+    -0.5f, 0.5f, -0.5f, 1.0f, 1.0f, 1.0f, 0.0f, 1.0f
 };
 
-static const int index_count = 6;
+static const int index_count = 12;
 static const uint16_t indices[] =
 {
-    0, 1, 2, 2, 3, 0
+    0, 1, 2, 2, 3, 0,
+    4, 5, 6, 6, 7, 4
 };
 
 /*********************************************************************************************************************/
@@ -1288,7 +1294,7 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
     // Represents the position of the vertex
     vertex_input_attribute_descriptions[0].location = 0;
     vertex_input_attribute_descriptions[0].binding = 0;
-    vertex_input_attribute_descriptions[0].format = VK_FORMAT_R32G32_SFLOAT;
+    vertex_input_attribute_descriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
     vertex_input_attribute_descriptions[0].offset = 0;
 
     // Represents the color of the vertex
@@ -1339,7 +1345,7 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
     rasterization_state_creation_information.rasterizerDiscardEnable = VK_FALSE;
     rasterization_state_creation_information.polygonMode = VK_POLYGON_MODE_FILL;
     rasterization_state_creation_information.lineWidth = 1.0f;
-    rasterization_state_creation_information.cullMode = VK_CULL_MODE_BACK_BIT;
+    rasterization_state_creation_information.cullMode = VK_CULL_MODE_NONE;
     rasterization_state_creation_information.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
     rasterization_state_creation_information.depthBiasEnable = VK_FALSE;
 
@@ -1490,7 +1496,7 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
     // Texture Image Creation
     /*****************************************************************************************************************/
 
-    const char *image_file_path = "resources/images/textures/four_squares.png";
+    const char *image_file_path = "resources/images/textures/squares.png";
     if (image_load(window, image_file_path, &window->texture_image, &window->texture_image_memory) == 0)
     {
         log_error("Failed to load texture image");
@@ -2103,8 +2109,6 @@ void window_render_triangle(Window *window)
     vkCmdBindVertexBuffers(command_buffer, 0, 1, &window->vertex_buffer, offsets);
 
     vkCmdBindIndexBuffer(command_buffer, window->index_buffer, 0, VK_INDEX_TYPE_UINT16);
-
-    // vkCmdDraw(command_buffer, 3, 1, 0, 0);
 
     vkCmdBindDescriptorSets
     (
