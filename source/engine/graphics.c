@@ -47,10 +47,12 @@ typedef struct Window
     VkDescriptorSetLayout descriptor_set_layout;
     VkPipelineLayout pipeline_layout;
     VkPipeline pipeline;
-    VkFramebuffer *framebuffers;
     uint32_t maximum_frames_in_flight;
     VkCommandPool command_pool;
     VkCommandBuffer *command_buffers;
+    VkImage depth_image;
+    VkDeviceMemory depth_image_memory;
+    VkImageView depth_image_view;
     VkImage texture_image;
     VkDeviceMemory texture_image_memory;
     VkImageView texture_image_view;
@@ -64,6 +66,7 @@ typedef struct Window
     void **uniform_buffers_mapped;
     VkDescriptorPool descriptor_pool;
     VkDescriptorSet *descriptor_sets;
+    VkFramebuffer *framebuffers;
     VkSemaphore *image_available_semaphores;
     VkSemaphore *render_finished_semaphores;
     VkFence *in_flight_fences;
@@ -83,15 +86,15 @@ static const int vertex_count = 8;
 static const int vertex_size = 8;
 static const float vertices[] =
 {
-    -0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f,
-    0.5f, -0.5f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f,
-    0.5f, 0.5f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f,
-    -0.5f, 0.5f, 0.0f, 1.0f, 1.0f, 1.0f, 0.0f, 1.0f,
+    -0.5f, -0.5f, 0.25f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+    0.5f, -0.5f, 0.25f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f,
+    0.5f, 0.5f, 0.25f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f,
+    -0.5f, 0.5f, 0.25f, 1.0f, 1.0f, 1.0f, 0.0f, 1.0f,
 
-    -0.5f, -0.5f, -0.5f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f,
-    0.5f, -0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f,
-    0.5f, 0.5f, -0.5f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f,
-    -0.5f, 0.5f, -0.5f, 1.0f, 1.0f, 1.0f, 0.0f, 1.0f
+    -0.5f, -0.5f, -0.25f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+    0.5f, -0.5f, -0.25f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f,
+    0.5f, 0.5f, -0.25f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f,
+    -0.5f, 0.5f, -0.25f, 1.0f, 1.0f, 1.0f, 0.0f, 1.0f
 };
 
 static const int index_count = 12;
@@ -1116,23 +1119,94 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
     color_attachment_reference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     color_attachment_reference.attachment = 0;
 
+    const VkFormat depth_formats[] =
+    {
+        VK_FORMAT_D32_SFLOAT,
+        VK_FORMAT_D32_SFLOAT_S8_UINT,
+        VK_FORMAT_D24_UNORM_S8_UINT
+    };
+
+    size_t chosen_depth_format_index = SIZE_MAX;
+    const size_t depth_format_count = sizeof(depth_formats) / sizeof(depth_formats[0]);
+    for (size_t depth_format_index = 0; depth_format_index < depth_format_count; ++depth_format_index)
+    {
+        VkFormatProperties format_properties;
+        vkGetPhysicalDeviceFormatProperties(physical_device, depth_formats[depth_format_index], &format_properties);
+
+        if
+        (
+            (format_properties.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) ==
+            VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT
+        )
+        {
+            chosen_depth_format_index = depth_format_index;
+            break;
+        }
+    }
+
+    if (chosen_depth_format_index == SIZE_MAX)
+    {
+        log_error("Failed to find supported depth format");
+        window_destroy(window);
+        return NULL;
+    }
+
+    const VkFormat depth_format = depth_formats[chosen_depth_format_index];
+
+    VkAttachmentDescription depth_attachment_description = {};
+    depth_attachment_description.format = depth_format;
+    depth_attachment_description.samples = VK_SAMPLE_COUNT_1_BIT;
+    depth_attachment_description.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    depth_attachment_description.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    depth_attachment_description.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    depth_attachment_description.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    depth_attachment_description.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    depth_attachment_description.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+    VkAttachmentReference depth_attachment_reference = {};
+    depth_attachment_reference.attachment = 1;
+    depth_attachment_reference.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
     VkSubpassDescription subpass_description = {};
     subpass_description.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    subpass_description.pDepthStencilAttachment = &depth_attachment_reference;
     subpass_description.pColorAttachments = &color_attachment_reference;
     subpass_description.colorAttachmentCount = 1;
 
     VkSubpassDependency subpass_dependency = {};
     subpass_dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
     subpass_dependency.dstSubpass = 0;
-    subpass_dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    subpass_dependency.srcStageMask =
+    (
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+        VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT
+    );
+
     subpass_dependency.srcAccessMask = 0;
-    subpass_dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    subpass_dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    subpass_dependency.dstStageMask =
+    (
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+        VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT
+    );
+
+    subpass_dependency.dstAccessMask =
+    (
+        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+        VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT
+    );
+
+    const VkAttachmentDescription attachment_descriptions[] =
+    {
+        color_attachment_description,
+        depth_attachment_description
+    };
+
+    const size_t attachment_description_count = sizeof(attachment_descriptions) / sizeof(attachment_descriptions[0]);
 
     VkRenderPassCreateInfo render_pass_creation_information = {};
     render_pass_creation_information.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    render_pass_creation_information.attachmentCount = 1;
-    render_pass_creation_information.pAttachments = &color_attachment_description;
+    render_pass_creation_information.attachmentCount = attachment_description_count;
+    render_pass_creation_information.pAttachments = attachment_descriptions;
     render_pass_creation_information.subpassCount = 1;
     render_pass_creation_information.pSubpasses = &subpass_description;
     render_pass_creation_information.dependencyCount = 1;
@@ -1354,6 +1428,16 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
     multisampling_state_creation_information.sampleShadingEnable = VK_FALSE;
     multisampling_state_creation_information.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
 
+    VkPipelineDepthStencilStateCreateInfo depth_stencil_state_creation_information = {};
+    depth_stencil_state_creation_information.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+    depth_stencil_state_creation_information.depthTestEnable = VK_TRUE;
+    depth_stencil_state_creation_information.depthWriteEnable = VK_TRUE;
+    depth_stencil_state_creation_information.depthCompareOp = VK_COMPARE_OP_LESS;
+    depth_stencil_state_creation_information.depthBoundsTestEnable = VK_FALSE;
+    depth_stencil_state_creation_information.stencilTestEnable = VK_FALSE;
+    depth_stencil_state_creation_information.minDepthBounds = 0.0f;
+    depth_stencil_state_creation_information.maxDepthBounds = 1.0f;
+
     VkPipelineColorBlendAttachmentState color_blend_attachment_state = {};
     color_blend_attachment_state.blendEnable = VK_FALSE;
     color_blend_attachment_state.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
@@ -1388,7 +1472,7 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
     pipeline_creation_information.pRasterizationState = &rasterization_state_creation_information;
     pipeline_creation_information.pMultisampleState = &multisampling_state_creation_information;
     pipeline_creation_information.pColorBlendState = &color_blend_state_creation_information;
-    pipeline_creation_information.pDepthStencilState = NULL;
+    pipeline_creation_information.pDepthStencilState = &depth_stencil_state_creation_information;
     pipeline_creation_information.pDynamicState = NULL;
     pipeline_creation_information.layout = window->pipeline_layout;
     pipeline_creation_information.renderPass = window->render_pass;
@@ -1404,42 +1488,6 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
         log_error("Failed to create pipeline: %s", string_VkResult(result));
         window_destroy(window);
         return NULL;
-    }
-
-    /*****************************************************************************************************************/
-    // Framebuffers Creation
-    /*****************************************************************************************************************/
-
-    window->framebuffers = calloc(window->image_count, sizeof(VkFramebuffer));
-    if (window->framebuffers == NULL)
-    {
-        log_error("Failed to allocate memory for framebuffers");
-        window_destroy(window);
-        return NULL;
-    }
-
-    for (uint32_t framebuffer_index = 0; framebuffer_index < window->image_count; ++framebuffer_index)
-    {
-        VkFramebufferCreateInfo framebuffer_creation_information = {};
-        framebuffer_creation_information.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-        framebuffer_creation_information.renderPass = window->render_pass;
-        framebuffer_creation_information.attachmentCount = 1;
-        framebuffer_creation_information.pAttachments = &window->image_views[framebuffer_index];
-        framebuffer_creation_information.width = (uint32_t)window_width;
-        framebuffer_creation_information.height = (uint32_t)window_height;
-        framebuffer_creation_information.layers = 1;
-
-        result = vkCreateFramebuffer
-        (
-            logical_device, &framebuffer_creation_information, NULL, &window->framebuffers[framebuffer_index]
-        );
-
-        if (result != VK_SUCCESS)
-        {
-            log_error("Failed to create framebuffer %d: %s", framebuffer_index, string_VkResult(result));
-            window_destroy(window);
-            return NULL;
-        }
     }
 
     /*****************************************************************************************************************/
@@ -1488,6 +1536,72 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
     if (result != VK_SUCCESS)
     {
         log_error("Failed to create command buffers: %s", string_VkResult(result));
+        window_destroy(window);
+        return NULL;
+    }
+
+    /*****************************************************************************************************************/
+    // Depth Resources Creation
+    /*****************************************************************************************************************/
+
+    VkImageCreateInfo depth_image_creation_information = {};
+    depth_image_creation_information.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    depth_image_creation_information.imageType = VK_IMAGE_TYPE_2D;
+    depth_image_creation_information.extent.width = window->window_extent.width;
+    depth_image_creation_information.extent.height = window->window_extent.height;
+    depth_image_creation_information.extent.depth = 1;
+    depth_image_creation_information.mipLevels = 1;
+    depth_image_creation_information.arrayLayers = 1;
+    depth_image_creation_information.format = depth_format;
+    depth_image_creation_information.tiling = VK_IMAGE_TILING_OPTIMAL;
+    depth_image_creation_information.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    depth_image_creation_information.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+    depth_image_creation_information.samples = VK_SAMPLE_COUNT_1_BIT;
+    depth_image_creation_information.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+    result = vkCreateImage(logical_device, &depth_image_creation_information, NULL, &window->depth_image);
+    if (result != VK_SUCCESS)
+    {
+        log_error("Failed to create depth image: %s", string_VkResult(result));
+        window_destroy(window);
+        return NULL;
+    }
+
+    VkMemoryRequirements depth_image_memory_requirements;
+    vkGetImageMemoryRequirements(logical_device, window->depth_image, &depth_image_memory_requirements);
+
+    if
+    (
+        memory_allocate
+        (
+            window, depth_image_memory_requirements, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &window->depth_image_memory
+        ) == 0
+    )
+    {
+        log_error("Failed to allocate memory for depth image");
+        window_destroy(window);
+        return NULL;
+    }
+
+    VkImageViewCreateInfo depth_image_view_creation_information = {};
+    depth_image_view_creation_information.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    depth_image_view_creation_information.image = window->depth_image;
+    depth_image_view_creation_information.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    depth_image_view_creation_information.format = depth_format;
+    depth_image_view_creation_information.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+    depth_image_view_creation_information.subresourceRange.baseMipLevel = 0;
+    depth_image_view_creation_information.subresourceRange.levelCount = 1;
+    depth_image_view_creation_information.subresourceRange.baseArrayLayer = 0;
+    depth_image_view_creation_information.subresourceRange.layerCount = 1;
+
+    result = vkCreateImageView
+    (
+        logical_device, &depth_image_view_creation_information, NULL, &window->depth_image_view
+    );
+
+    if (result != VK_SUCCESS)
+    {
+        log_error("Failed to create depth image view: %s", string_VkResult(result));
         window_destroy(window);
         return NULL;
     }
@@ -1868,6 +1982,53 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
     }
 
     /*****************************************************************************************************************/
+    // Framebuffers Creation
+    /*****************************************************************************************************************/
+
+    window->framebuffers = calloc(window->image_count, sizeof(VkFramebuffer));
+    if (window->framebuffers == NULL)
+    {
+        log_error("Failed to allocate memory for framebuffers");
+        window_destroy(window);
+        return NULL;
+    }
+
+    for (uint32_t framebuffer_index = 0; framebuffer_index < window->image_count; ++framebuffer_index)
+    {
+        const VkImageView framebuffer_attachments[] =
+        {
+            window->image_views[framebuffer_index],
+            window->depth_image_view
+        };
+
+        const size_t framebuffer_attachment_count =
+        (
+            sizeof(framebuffer_attachments) / sizeof(framebuffer_attachments[0])
+        );
+
+        VkFramebufferCreateInfo framebuffer_creation_information = {};
+        framebuffer_creation_information.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+        framebuffer_creation_information.renderPass = window->render_pass;
+        framebuffer_creation_information.attachmentCount = framebuffer_attachment_count;
+        framebuffer_creation_information.pAttachments = framebuffer_attachments;
+        framebuffer_creation_information.width = (uint32_t)window_width;
+        framebuffer_creation_information.height = (uint32_t)window_height;
+        framebuffer_creation_information.layers = 1;
+
+        result = vkCreateFramebuffer
+        (
+            logical_device, &framebuffer_creation_information, NULL, &window->framebuffers[framebuffer_index]
+        );
+
+        if (result != VK_SUCCESS)
+        {
+            log_error("Failed to create framebuffer %d: %s", framebuffer_index, string_VkResult(result));
+            window_destroy(window);
+            return NULL;
+        }
+    }
+
+    /*****************************************************************************************************************/
     // Synchronization Objects Creation
     /*****************************************************************************************************************/
 
@@ -2013,9 +2174,16 @@ int window_render_frame(Window *window, void (*callback)(void *user_data), void 
     render_pass_beginning_information.renderArea.offset.x = 0;
     render_pass_beginning_information.renderArea.offset.y = 0;
 
-    VkClearValue clear_value = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
-    render_pass_beginning_information.pClearValues = &clear_value;
-    render_pass_beginning_information.clearValueCount = 1;
+    VkClearValue clear_values[2];
+    clear_values[0].color.float32[0] = 0.0f;
+    clear_values[0].color.float32[1] = 0.0f;
+    clear_values[0].color.float32[2] = 0.0f;
+    clear_values[0].color.float32[3] = 1.0f;
+    clear_values[1].depthStencil.depth = 1.0f;
+    clear_values[1].depthStencil.stencil = 0;
+
+    render_pass_beginning_information.pClearValues = clear_values;
+    render_pass_beginning_information.clearValueCount = 2;
 
     vkCmdBeginRenderPass(command_buffer, &render_pass_beginning_information, VK_SUBPASS_CONTENTS_INLINE);
 
@@ -2152,6 +2320,12 @@ void window_destroy(Window *window)
     free(window->uniform_buffers_memory);
     free(window->uniform_buffers);
 
+    for (uint32_t framebuffer_index = 0; framebuffer_index < window->image_count; ++framebuffer_index)
+    {
+        vkDestroyFramebuffer(logical_device, window->framebuffers[framebuffer_index], NULL);
+    }
+
+    free(window->framebuffers);
     free(window->descriptor_sets);
     vkDestroyDescriptorPool(logical_device, window->descriptor_pool, NULL);
     vkDestroyDescriptorSetLayout(logical_device, window->descriptor_set_layout, NULL);
@@ -2167,15 +2341,12 @@ void window_destroy(Window *window)
     vkDestroyImage(logical_device, window->texture_image, NULL);
     vkFreeMemory(logical_device, window->texture_image_memory, NULL);
 
+    vkDestroyImageView(logical_device, window->depth_image_view, NULL);
+    vkDestroyImage(logical_device, window->depth_image, NULL);
+    vkFreeMemory(logical_device, window->depth_image_memory, NULL);
+
     vkDestroyCommandPool(logical_device, window->command_pool, NULL);
     free(window->command_buffers);
-
-    for (uint32_t framebuffer_index = 0; framebuffer_index < window->image_count; ++framebuffer_index)
-    {
-        vkDestroyFramebuffer(logical_device, window->framebuffers[framebuffer_index], NULL);
-    }
-
-    free(window->framebuffers);
 
     vkDestroyPipeline(logical_device, window->pipeline, NULL);
     vkDestroyPipelineLayout(logical_device, window->pipeline_layout, NULL);
