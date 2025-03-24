@@ -171,7 +171,7 @@ static unsigned char image_create_png(FILE *file, struct Image *image)
     return 1;
 }
 
-void image_destroy(struct Image *const image)
+void image_destroy(struct Image *image)
 {
     if (image == NULL)
     {
@@ -184,7 +184,9 @@ void image_destroy(struct Image *const image)
     }
 
     free(image->data);
+
     free(image);
+    image = NULL;
 }
 
 /*********************************************************************************************************************/
@@ -263,7 +265,7 @@ struct Shader *shader_create(const char *const path)
     return shader;
 }
 
-void shader_destroy(struct Shader *const shader)
+void shader_destroy(struct Shader *shader)
 {
     if (shader == NULL)
     {
@@ -271,5 +273,7 @@ void shader_destroy(struct Shader *const shader)
     }
 
     free(shader->data);
+
     free(shader);
+    shader = NULL;
 }

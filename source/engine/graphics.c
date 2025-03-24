@@ -23,8 +23,8 @@ struct Context
     VkInstance vulkan_instance;
     VkDebugUtilsMessengerEXT debug_messenger;
     VkPhysicalDevice physical_device;
-    uint32_t graphics_queue_family_index;
-    uint32_t present_queue_family_index;
+    uint64_t graphics_queue_family_index;
+    uint64_t present_queue_family_index;
     VkDevice logical_device;
     VkQueue graphics_queue;
     VkQueue present_queue;
@@ -42,7 +42,7 @@ struct Window
     VkImage *images;
     VkImageView *image_views;
     VkRenderPass render_pass;
-    size_t shader_module_count;
+    uint32_t shader_module_count;
     VkShaderModule *shader_modules;
     VkDescriptorSetLayout descriptor_set_layout;
     VkPipelineLayout pipeline_layout;
@@ -57,10 +57,10 @@ struct Window
     VkDeviceMemory texture_image_memory;
     VkImageView texture_image_view;
     VkSampler texture_sampler;
-    unsigned int vertex_count;
+    uint32_t vertex_count;
     float *vertices;
-    unsigned int index_count;
-    unsigned short *indices;
+    uint32_t index_count;
+    uint32_t *indices;
     VkBuffer vertex_buffer;
     VkDeviceMemory vertex_buffer_memory;
     VkBuffer index_buffer;
@@ -74,7 +74,8 @@ struct Window
     VkSemaphore *image_available_semaphores;
     VkSemaphore *render_finished_semaphores;
     VkFence *in_flight_fences;
-    uint32_t current_frame_index;
+    uint32_t image_index;
+    uint32_t frame_index;
     struct UniformBufferObject
     {
         float model[4][4];
@@ -563,7 +564,9 @@ void context_destroy(struct Context *context)
     }
 
     vkDestroyInstance(context->vulkan_instance, NULL);
+
     free(context);
+    context = NULL;
 }
 
 /*********************************************************************************************************************/
@@ -807,27 +810,30 @@ static uint32_t rate_physical_device_extensions(VkPhysicalDevice physical_device
 // Window Functions
 /*********************************************************************************************************************/
 
-static inline unsigned char memory_allocate
+static inline uint8_t window_begin_frame(struct Window *window);
+static inline uint8_t window_end_frame(struct Window *window);
+
+static inline uint8_t memory_allocate
 (
     struct Window *window, VkMemoryRequirements memory_requirements, VkMemoryPropertyFlags memory_properties,
     VkDeviceMemory *memory
 );
 
-static inline unsigned char command_start(struct Window *window, VkCommandBuffer *command_buffer);
-static inline unsigned char command_finish(struct Window *window, VkCommandBuffer command_buffer);
+static inline uint8_t command_start(struct Window *window, VkCommandBuffer *command_buffer);
+static inline uint8_t command_finish(struct Window *window, VkCommandBuffer command_buffer);
 
-static inline unsigned char buffer_create
+static inline uint8_t buffer_create
 (
     struct Window *window, VkDeviceSize buffer_size, VkBufferUsageFlags buffer_usages,
     VkMemoryPropertyFlags memory_properties, VkBuffer *buffer, VkDeviceMemory *buffer_memory
 );
 
-static inline unsigned char buffer_copy
+static inline uint8_t buffer_copy
 (
     struct Window *window, VkBuffer source_buffer, VkBuffer destination_buffer, VkDeviceSize buffer_size
 );
 
-static inline unsigned char image_load
+static inline uint8_t image_load
 (
     struct Window *window, const char *file_path, VkImage *texture_image, VkDeviceMemory *texture_image_memory
 );
@@ -836,7 +842,10 @@ static inline unsigned char image_load
 // Window Creation Function
 /*********************************************************************************************************************/
 
-struct Window *window_create(const char *title, int initial_width, int initial_height, struct Context *context)
+struct Window *window_create
+(
+    const char *title, unsigned int initial_width, unsigned int initial_height, struct Context *context
+)
 {
     VkResult result;
 
@@ -854,9 +863,9 @@ struct Window *window_create(const char *title, int initial_width, int initial_h
     }
 
     window->context = context;
-    VkInstance vulkan_instance = context->vulkan_instance;
-    VkPhysicalDevice physical_device = context->physical_device;
-    VkDevice logical_device = context->logical_device;
+    VkInstance const vulkan_instance = context->vulkan_instance;
+    VkPhysicalDevice const physical_device = context->physical_device;
+    VkDevice const logical_device = context->logical_device;
 
     /*****************************************************************************************************************/
     // SDL Window Creation
@@ -2126,6 +2135,17 @@ struct Window *window_create(const char *title, int initial_width, int initial_h
         }
     }
 
+    /*****************************************************************************************************************/
+    // Beginning the First Frame
+    /*****************************************************************************************************************/
+
+    if (window_begin_frame(window) == 0)
+    {
+        log_error("Failed to begin first window frame");
+        window_destroy(window);
+        return NULL;
+    }
+
     return window;
 }
 
@@ -2133,38 +2153,54 @@ struct Window *window_create(const char *title, int initial_width, int initial_h
 // Window Frame Rendering Function
 /*********************************************************************************************************************/
 
-int window_render_frame(struct Window *window, void (*callback)(void *user_data), void *user_data)
+unsigned char window_update(struct Window *window)
+{
+    if (window_end_frame(window) == 0)
+    {
+        log_error("Failed to end window frame");
+        return 0;
+    }
+
+    // Move to the next frame to get the corresponding command buffer, and synchronization objects
+    window->frame_index = (window->frame_index + 1) % window->maximum_frames_in_flight;
+
+    if (window_begin_frame(window) == 0)
+    {
+        log_error("Failed to begin window frame");
+        return 0;
+    }
+
+    return 1;
+}
+
+static inline uint8_t window_begin_frame(struct Window *window)
 {
     VkResult result;
 
-    VkDevice logical_device = window->context->logical_device;
+    VkDevice const logical_device = window->context->logical_device;
 
-    // Move to the next frame to get the corresponding command buffer, and synchronization objects
-    window->current_frame_index = (window->current_frame_index + 1) % window->maximum_frames_in_flight;
-
-    VkFence in_flight_fence = window->in_flight_fences[window->current_frame_index];
-    VkSemaphore image_available_semaphore = window->image_available_semaphores[window->current_frame_index];
-    VkSemaphore render_finished_semaphore = window->render_finished_semaphores[window->current_frame_index];
-    VkCommandBuffer command_buffer = window->command_buffers[window->current_frame_index];
+    VkCommandBuffer const command_buffer = window->command_buffers[window->frame_index];
+    VkSemaphore const image_available_semaphore = window->image_available_semaphores[window->frame_index];
+    VkSemaphore const render_finished_semaphore = window->render_finished_semaphores[window->frame_index];
+    VkFence const in_flight_fence = window->in_flight_fences[window->frame_index];
 
     result = vkWaitForFences(logical_device, 1, &in_flight_fence, VK_TRUE, UINT64_MAX);
     if (result != VK_SUCCESS)
     {
-        log_error("Failed to wait for in flight fence #%d: %s", window->current_frame_index, string_VkResult(result));
+        log_error("Failed to wait for in flight fence #%d: %s", window->frame_index, string_VkResult(result));
         return 0;
     }
 
     result = vkResetFences(logical_device, 1, &in_flight_fence);
     if (result != VK_SUCCESS)
     {
-        log_error("Failed to reset in flight fence #%d: %s", window->current_frame_index, string_VkResult(result));
+        log_error("Failed to reset in flight fence #%d: %s", window->frame_index, string_VkResult(result));
         return 0;
     }
 
-    uint32_t image_index;
     result = vkAcquireNextImageKHR
     (
-        logical_device, window->swapchain, UINT64_MAX, image_available_semaphore, VK_NULL_HANDLE, &image_index
+        logical_device, window->swapchain, UINT64_MAX, image_available_semaphore, VK_NULL_HANDLE, &window->image_index
     );
 
     if (result != VK_SUCCESS)
@@ -2176,7 +2212,7 @@ int window_render_frame(struct Window *window, void (*callback)(void *user_data)
     result = vkResetCommandBuffer(command_buffer, 0);
     if (result != VK_SUCCESS)
     {
-        log_error("Failed to reset command buffer #%d: %s", window->current_frame_index, string_VkResult(result));
+        log_error("Failed to reset command buffer #%d: %s", window->frame_index, string_VkResult(result));
         return 0;
     }
 
@@ -2186,40 +2222,29 @@ int window_render_frame(struct Window *window, void (*callback)(void *user_data)
     result = vkBeginCommandBuffer(command_buffer, &command_buffer_beginning_information);
     if (result != VK_SUCCESS)
     {
-        log_error("Failed to begin command buffer #%d: %s", window->current_frame_index, string_VkResult(result));
+        log_error("Failed to begin command buffer #%d: %s", window->frame_index, string_VkResult(result));
         return 0;
     }
 
-    VkRenderPassBeginInfo render_pass_beginning_information = {};
-    render_pass_beginning_information.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-    render_pass_beginning_information.renderPass = window->render_pass;
-    render_pass_beginning_information.framebuffer = window->framebuffers[window->current_frame_index];
-    render_pass_beginning_information.renderArea.extent = window->window_extent;
-    render_pass_beginning_information.renderArea.offset.x = 0;
-    render_pass_beginning_information.renderArea.offset.y = 0;
+    return 1;
+}
 
-    VkClearValue clear_values[2];
-    clear_values[0].color.float32[0] = 0.0f;
-    clear_values[0].color.float32[1] = 0.0f;
-    clear_values[0].color.float32[2] = 0.0f;
-    clear_values[0].color.float32[3] = 1.0f;
-    clear_values[1].depthStencil.depth = 1.0f;
-    clear_values[1].depthStencil.stencil = 0;
+static inline uint8_t window_end_frame(struct Window *window)
+{
+    VkResult result;
 
-    render_pass_beginning_information.pClearValues = clear_values;
-    render_pass_beginning_information.clearValueCount = 2;
+    struct Context const *context = window->context;
+    VkDevice const logical_device = context->logical_device;
 
-    vkCmdBeginRenderPass(command_buffer, &render_pass_beginning_information, VK_SUBPASS_CONTENTS_INLINE);
-
-    // Trigger the callback to let the user pass rendering commands
-    callback(user_data);
-
-    vkCmdEndRenderPass(command_buffer);
+    VkCommandBuffer const command_buffer = window->command_buffers[window->frame_index];
+    VkSemaphore const image_available_semaphore = window->image_available_semaphores[window->frame_index];
+    VkSemaphore const render_finished_semaphore = window->render_finished_semaphores[window->frame_index];
+    VkFence const in_flight_fence = window->in_flight_fences[window->frame_index];
 
     result = vkEndCommandBuffer(command_buffer);
     if (result != VK_SUCCESS)
     {
-        log_error("Failed to end command buffer #%d: %s", window->current_frame_index, string_VkResult(result));
+        log_error("Failed to end command buffer #%d: %s", window->frame_index, string_VkResult(result));
         return 0;
     }
 
@@ -2239,10 +2264,10 @@ int window_render_frame(struct Window *window, void (*callback)(void *user_data)
 
     submission_information.pWaitDstStageMask = wait_stages;
 
-    result = vkQueueSubmit(window->context->graphics_queue, 1, &submission_information, in_flight_fence);
+    result = vkQueueSubmit(context->graphics_queue, 1, &submission_information, in_flight_fence);
     if (result != VK_SUCCESS)
     {
-        log_error("Failed to submit command buffer #%d: %s", window->current_frame_index, string_VkResult(result));
+        log_error("Failed to submit command buffer #%d: %s", window->frame_index, string_VkResult(result));
         return 0;
     }
 
@@ -2250,15 +2275,15 @@ int window_render_frame(struct Window *window, void (*callback)(void *user_data)
     presentation_information.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
     presentation_information.pSwapchains = &window->swapchain;
     presentation_information.swapchainCount = 1;
-    presentation_information.pImageIndices = &image_index;
+    presentation_information.pImageIndices = &window->image_index;
     presentation_information.pWaitSemaphores = &render_finished_semaphore;
     presentation_information.waitSemaphoreCount = 1;
     presentation_information.pResults = NULL;
 
-    result = vkQueuePresentKHR(window->context->present_queue, &presentation_information);
+    result = vkQueuePresentKHR(context->present_queue, &presentation_information);
     if (result != VK_SUCCESS)
     {
-        log_error("Failed to present image: %s", window->current_frame_index, string_VkResult(result));
+        log_error("Failed to present image: %s", window->frame_index, string_VkResult(result));
         return 0;
     }
 
@@ -2271,6 +2296,29 @@ int window_render_frame(struct Window *window, void (*callback)(void *user_data)
 
 void window_render_something(struct Window *window)
 {
+    VkCommandBuffer command_buffer = window->command_buffers[window->frame_index];
+
+    VkRenderPassBeginInfo render_pass_beginning_information = {};
+    render_pass_beginning_information.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    render_pass_beginning_information.renderPass = window->render_pass;
+    render_pass_beginning_information.framebuffer = window->framebuffers[window->frame_index];
+    render_pass_beginning_information.renderArea.extent = window->window_extent;
+    render_pass_beginning_information.renderArea.offset.x = 0;
+    render_pass_beginning_information.renderArea.offset.y = 0;
+
+    VkClearValue clear_values[2];
+    clear_values[0].color.float32[0] = 0.0f;
+    clear_values[0].color.float32[1] = 0.0f;
+    clear_values[0].color.float32[2] = 0.0f;
+    clear_values[0].color.float32[3] = 1.0f;
+    clear_values[1].depthStencil.depth = 1.0f;
+    clear_values[1].depthStencil.stencil = 0;
+
+    render_pass_beginning_information.pClearValues = clear_values;
+    render_pass_beginning_information.clearValueCount = 2;
+
+    vkCmdBeginRenderPass(command_buffer, &render_pass_beginning_information, VK_SUBPASS_CONTENTS_INLINE);
+
     const float radians = acos(-1.0) / 180.0f;
 
     struct timespec time;
@@ -2290,10 +2338,8 @@ void window_render_something(struct Window *window)
 
     window->uniform_buffer_object.projection[1][1] *= -1.0f;
 
-    void *uniform_buffer_memory = window->uniform_buffers_mapped[window->current_frame_index];
+    void *uniform_buffer_memory = window->uniform_buffers_mapped[window->frame_index];
     memcpy(uniform_buffer_memory, &window->uniform_buffer_object, sizeof(window->uniform_buffer_object));
-
-    VkCommandBuffer command_buffer = window->command_buffers[window->current_frame_index];
 
     vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, window->pipeline);
 
@@ -2305,10 +2351,12 @@ void window_render_something(struct Window *window)
     vkCmdBindDescriptorSets
     (
         command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, window->pipeline_layout, 0, 1,
-        &window->descriptor_sets[window->current_frame_index], 0, NULL
+        &window->descriptor_sets[window->frame_index], 0, NULL
     );
 
     vkCmdDrawIndexed(command_buffer, window->index_count, 1, 0, 0, 0);
+
+    vkCmdEndRenderPass(command_buffer);
 }
 
 /*********************************************************************************************************************/
@@ -2317,13 +2365,25 @@ void window_render_something(struct Window *window)
 
 void window_destroy(struct Window *window)
 {
+    VkResult result;
+
     if (window == NULL)
     {
         return;
     }
 
-    VkInstance vulkan_instance = window->context->vulkan_instance;
-    VkDevice logical_device = window->context->logical_device;
+    struct Context const *context = window->context;
+    VkInstance const vulkan_instance = context->vulkan_instance;
+    VkDevice const logical_device = context->logical_device;
+
+    VkCommandBuffer *command_buffers = window->command_buffers;
+    uint32_t const frame_index = window->frame_index;
+
+    result = vkEndCommandBuffer(command_buffers[frame_index]);
+    if (result != VK_SUCCESS)
+    {
+        log_warning("Failed to end last command buffer #%d: %s", frame_index, string_VkResult(result));
+    }
 
     vkDeviceWaitIdle(logical_device);
 
@@ -2332,6 +2392,7 @@ void window_destroy(struct Window *window)
         vkDestroyFence(logical_device, window->in_flight_fences[frame_index], NULL);
         vkDestroySemaphore(logical_device, window->render_finished_semaphores[frame_index], NULL);
         vkDestroySemaphore(logical_device, window->image_available_semaphores[frame_index], NULL);
+        vkDestroyFramebuffer(logical_device, window->framebuffers[frame_index], NULL);
         vkDestroyBuffer(logical_device, window->uniform_buffers[frame_index], NULL);
         vkFreeMemory(logical_device, window->uniform_buffers_memory[frame_index], NULL);
         free(window->uniform_buffers_mapped[frame_index]);
@@ -2340,16 +2401,11 @@ void window_destroy(struct Window *window)
     free(window->in_flight_fences);
     free(window->render_finished_semaphores);
     free(window->image_available_semaphores);
+    free(window->framebuffers);
     free(window->uniform_buffers_mapped);
     free(window->uniform_buffers_memory);
     free(window->uniform_buffers);
 
-    for (uint32_t framebuffer_index = 0; framebuffer_index < window->image_count; ++framebuffer_index)
-    {
-        vkDestroyFramebuffer(logical_device, window->framebuffers[framebuffer_index], NULL);
-    }
-
-    free(window->framebuffers);
     free(window->descriptor_sets);
     vkDestroyDescriptorPool(logical_device, window->descriptor_pool, NULL);
     vkDestroyDescriptorSetLayout(logical_device, window->descriptor_set_layout, NULL);
@@ -2373,7 +2429,7 @@ void window_destroy(struct Window *window)
     vkFreeMemory(logical_device, window->depth_image_memory, NULL);
 
     vkDestroyCommandPool(logical_device, window->command_pool, NULL);
-    free(window->command_buffers);
+    free(command_buffers);
 
     vkDestroyPipeline(logical_device, window->pipeline, NULL);
     vkDestroyPipelineLayout(logical_device, window->pipeline_layout, NULL);
@@ -2398,14 +2454,16 @@ void window_destroy(struct Window *window)
     vkDestroySwapchainKHR(logical_device, window->swapchain, NULL);
     SDL_Vulkan_DestroySurface(vulkan_instance, window->surface, NULL);
     SDL_DestroyWindow(window->sdl_window_handle);
+
     free(window);
+    window = NULL;
 }
 
 /*********************************************************************************************************************/
 // Memory Allocation Function
 /*********************************************************************************************************************/
 
-static inline unsigned char memory_allocate
+static inline uint8_t memory_allocate
 (
     struct Window *window, VkMemoryRequirements memory_requirements, VkMemoryPropertyFlags memory_properties,
     VkDeviceMemory *memory
@@ -2464,7 +2522,7 @@ static inline unsigned char memory_allocate
 // Single Time Command Buffer Functions
 /*********************************************************************************************************************/
 
-static inline unsigned char command_start(struct Window *window, VkCommandBuffer *command_buffer)
+static inline uint8_t command_start(struct Window *window, VkCommandBuffer *command_buffer)
 {
     VkResult result;
 
@@ -2500,7 +2558,7 @@ static inline unsigned char command_start(struct Window *window, VkCommandBuffer
     return 1;
 }
 
-static inline unsigned char command_finish(struct Window *window, VkCommandBuffer command_buffer)
+static inline uint8_t command_finish(struct Window *window, VkCommandBuffer command_buffer)
 {
     VkResult result;
 
@@ -2542,7 +2600,7 @@ static inline unsigned char command_finish(struct Window *window, VkCommandBuffe
 // Buffer Creation Function
 /*********************************************************************************************************************/
 
-static inline unsigned char buffer_create
+static inline uint8_t buffer_create
 (
     struct Window *window, VkDeviceSize buffer_size, VkBufferUsageFlags buffer_usages,
     VkMemoryPropertyFlags memory_properties, VkBuffer *buffer, VkDeviceMemory *buffer_memory
@@ -2588,7 +2646,7 @@ static inline unsigned char buffer_create
 // Buffer Copy Function
 /*********************************************************************************************************************/
 
-static inline unsigned char buffer_copy
+static inline uint8_t buffer_copy
 (
     struct Window *window, VkBuffer source_buffer, VkBuffer destination_buffer, VkDeviceSize buffer_size
 )
@@ -2617,18 +2675,18 @@ static inline unsigned char buffer_copy
 // PNG Image to Texture Image and Texture Image Memory Function
 /*********************************************************************************************************************/
 
-static inline unsigned char image_layout_transition
+static inline uint8_t image_layout_transition
 (
     struct Window *window, VkImage image, VkFormat format, VkImageLayout previous_image_layout,
     VkImageLayout next_image_layout
 );
 
-static inline unsigned char buffer_copy_to_image
+static inline uint8_t buffer_copy_to_image
 (
     struct Window *window, VkBuffer buffer, VkImage image, uint32_t width, uint32_t height
 );
 
-static inline unsigned char image_load
+static inline uint8_t image_load
 (
     struct Window *window, const char *file_path, VkImage *texture_image, VkDeviceMemory *texture_image_memory
 )
@@ -2791,7 +2849,7 @@ static inline unsigned char image_load
     return 1;
 }
 
-static inline unsigned char image_layout_transition
+static inline uint8_t image_layout_transition
 (
     struct Window *window, VkImage image, VkFormat format, VkImageLayout previous_image_layout,
     VkImageLayout next_image_layout
@@ -2870,7 +2928,7 @@ static inline unsigned char image_layout_transition
     return 1;
 }
 
-static inline unsigned char buffer_copy_to_image
+static inline uint8_t buffer_copy_to_image
 (
     struct Window *window, VkBuffer buffer, VkImage image, uint32_t width, uint32_t height
 )

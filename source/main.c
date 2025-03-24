@@ -47,15 +47,11 @@ int main()
         terminate(&state, EXIT_FAILURE);
     }
 
-    log_debug("Starting program loop ...");
-
     // This will keep waiting for the `update()` function to return `false`
     while (update(&state) == 1);
 
     terminate(&state, EXIT_SUCCESS);
 }
-
-static void render(void *user_data);
 
 static int update(struct State *state)
 {
@@ -68,20 +64,15 @@ static int update(struct State *state)
         }
     }
 
-    if (window_render_frame(state->window, render, state) == 0)
+    window_render_something(state->window);
+
+    if (window_update(state->window) == 0)
     {
-        log_error("Failed to render frame");
+        log_error("Failed to update window");
         return 0;
     }
 
     return 1;
-}
-
-static void render(void *user_data)
-{
-    struct State *state = (struct State *)user_data;
-    window_render_something(state->window);
-    return;
 }
 
 static void terminate(struct State *state, int exit_code)

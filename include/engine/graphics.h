@@ -24,14 +24,16 @@ struct Window;
  * Creates an instance of `Window` and initializes its resources. Opens an SDL window with the title as a string and
  * the initial dimensions of the window as positive integers. Is associated with the given instance of `Context`.
  */
-struct Window *window_create(const char *title, int initial_width, int initial_height, struct Context *context);
+struct Window *window_create
+(
+    const char *title, unsigned int initial_width, unsigned int initial_height, struct Context *context
+);
 
 /**
- * Renders a frame on a `Window` by recording a command buffer, waiting for drawing operations to be sent when calling
- * the callback function, and ending the command buffer for submission to the graphics queue, and then to the present
- * queue after the rendering operations have been executed on the GPU. Returns `1` for success and `0` for failure.
+ * Renders a frame on a `Window` by submitting the recorded rendering commands for execution, and then for presenting
+ * after the rendering operations have been executed on the GPU. Returns `1` for success and `0` for failure.
  */
-int window_render_frame(struct Window *window, void (*callback)(void *user_data), void *user_data);
+unsigned char window_update(struct Window *window);
 
 /**
  * Renders something onto the window :)
