@@ -57,6 +57,10 @@ typedef struct Window
     VkDeviceMemory texture_image_memory;
     VkImageView texture_image_view;
     VkSampler texture_sampler;
+    unsigned int vertex_count;
+    float *vertices;
+    unsigned int index_count;
+    unsigned short *indices;
     VkBuffer vertex_buffer;
     VkDeviceMemory vertex_buffer_memory;
     VkBuffer index_buffer;
@@ -71,38 +75,13 @@ typedef struct Window
     VkSemaphore *render_finished_semaphores;
     VkFence *in_flight_fences;
     uint32_t current_frame_index;
+    struct UniformBufferObject
+    {
+        float model[4][4];
+        float view[4][4];
+        float projection[4][4];
+    } uniform_buffer_object;
 } Window;
-
-// Just place the data for the UBO, the vertices and indices here for now
-
-typedef struct UniformBufferObject
-{
-    float model[4][4];
-    float view[4][4];
-    float projection[4][4];
-} UniformBufferObject;
-
-static const int vertex_count = 8;
-static const int vertex_size = 8;
-static const float vertices[] =
-{
-    -0.5f, -0.5f, 0.25f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f,
-    0.5f, -0.5f, 0.25f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f,
-    0.5f, 0.5f, 0.25f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f,
-    -0.5f, 0.5f, 0.25f, 1.0f, 1.0f, 1.0f, 0.0f, 1.0f,
-
-    -0.5f, -0.5f, -0.25f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f,
-    0.5f, -0.5f, -0.25f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f,
-    0.5f, 0.5f, -0.25f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f,
-    -0.5f, 0.5f, -0.25f, 1.0f, 1.0f, 1.0f, 0.0f, 1.0f
-};
-
-static const int index_count = 12;
-static const uint16_t indices[] =
-{
-    0, 1, 2, 2, 3, 0,
-    4, 5, 6, 6, 7, 4
-};
 
 /*********************************************************************************************************************/
 // Context Functions
@@ -1357,7 +1336,7 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
 
     VkVertexInputBindingDescription vertex_input_binding_description = {};
     vertex_input_binding_description.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-    vertex_input_binding_description.stride = vertex_size * sizeof(float);
+    vertex_input_binding_description.stride = 8 * sizeof(float);
     vertex_input_binding_description.binding = 0;
 
     vertex_input_state_creation_information.pVertexBindingDescriptions = &vertex_input_binding_description;
@@ -1664,10 +1643,55 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
     }
 
     /*****************************************************************************************************************/
+    // Loading Vertices and Indices
+    /*****************************************************************************************************************/
+
+    window->vertex_count = 8;
+    window->vertices = malloc(8 * window->vertex_count * sizeof(float));
+    if (window->vertices == NULL)
+    {
+        log_error("Failed to allocate memory for vertices");
+        window_destroy(window);
+        return NULL;
+    }
+
+    const float vertices[] =
+    {
+        -0.5f, -0.5f, 0.25f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+        0.5f, -0.5f, 0.25f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f,
+        0.5f, 0.5f, 0.25f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f,
+        -0.5f, 0.5f, 0.25f, 1.0f, 1.0f, 1.0f, 0.0f, 1.0f,
+
+        -0.5f, -0.5f, -0.25f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+        0.5f, -0.5f, -0.25f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f,
+        0.5f, 0.5f, -0.25f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f,
+        -0.5f, 0.5f, -0.25f, 1.0f, 1.0f, 1.0f, 0.0f, 1.0f
+    };
+
+    memcpy(window->vertices, &vertices, sizeof(vertices));
+
+    window->index_count = 12;
+    window->indices = malloc(window->index_count * sizeof(unsigned short));
+    if (window->indices == NULL)
+    {
+        log_error("Failed to allocate memory for indices");
+        window_destroy(window);
+        return NULL;
+    }
+
+    const uint16_t indices[] =
+    {
+        0, 1, 2, 2, 3, 0,
+        4, 5, 6, 6, 7, 4
+    };
+
+    memcpy(window->indices, &indices, sizeof(indices));
+
+    /*****************************************************************************************************************/
     // Vertex Buffer Creation
     /*****************************************************************************************************************/
 
-    VkDeviceSize vertex_buffer_size = vertex_size * vertex_count * sizeof(float);
+    VkDeviceSize vertex_buffer_size = 8 * window->vertex_count * sizeof(float);
     
     VkBuffer vertex_staging_buffer;
     VkDeviceMemory vertex_staging_buffer_memory;
@@ -1702,7 +1726,7 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
         return NULL;
     }
 
-    memcpy(vertex_staging_buffer_data, vertices, vertex_buffer_size);
+    memcpy(vertex_staging_buffer_data, window->vertices, vertex_buffer_size);
     vkUnmapMemory(logical_device, vertex_staging_buffer_memory);
 
     if
@@ -1737,7 +1761,7 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
     // Index Buffer Creation
     /*****************************************************************************************************************/
 
-    VkDeviceSize index_buffer_size = index_count * sizeof(uint16_t);
+    VkDeviceSize index_buffer_size = window->index_count * sizeof(unsigned short);
 
     VkBuffer index_staging_buffer;
     VkDeviceMemory index_staging_buffer_memory;
@@ -1772,7 +1796,7 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
         return NULL;
     }
 
-    memcpy(index_staging_buffer_data, indices, index_buffer_size);
+    memcpy(index_staging_buffer_data, window->indices, index_buffer_size);
     vkUnmapMemory(logical_device, index_staging_buffer_memory);
 
     if
@@ -1808,7 +1832,7 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
     /*****************************************************************************************************************/
 
     uint32_t uniform_buffer_count = window->maximum_frames_in_flight;
-    VkDeviceSize uniform_buffer_size = sizeof(UniformBufferObject);
+    VkDeviceSize uniform_buffer_size = sizeof(window->uniform_buffer_object);
 
     window->uniform_buffers = calloc(uniform_buffer_count, sizeof(VkBuffer));
     if (window->uniform_buffers == NULL)
@@ -1948,7 +1972,7 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
     )
     {
         VkDescriptorBufferInfo descriptor_buffer_information = {};
-        descriptor_buffer_information.range = sizeof(UniformBufferObject);
+        descriptor_buffer_information.range = sizeof(window->uniform_buffer_object);
         descriptor_buffer_information.buffer = window->uniform_buffers[descriptor_set_index];
         descriptor_buffer_information.offset = 0;
 
@@ -2247,27 +2271,27 @@ int window_render_frame(Window *window, void (*callback)(void *user_data), void 
 
 void window_render_triangle(Window *window)
 {
-    UniformBufferObject uniform_buffer_object = {};
+    const float radians = acos(-1.0) / 180.0f;
 
     struct timespec time;
     clock_gettime(CLOCK_MONOTONIC, &time);
-    float current_time = time.tv_sec + time.tv_nsec / 1e9;
+    const float current_time = time.tv_sec + time.tv_nsec / 1e9;
 
     const float rotation_axis[3] = {0.0f, 0.0f, 1.0f};
-    matrix_4x4_rotate(uniform_buffer_object.model, current_time * (acos(-1.0) / 180.0f) * 90.0f, rotation_axis);
+    matrix_4x4_rotate(window->uniform_buffer_object.model, current_time * radians * 90.0f, rotation_axis);
 
     const float pov[3] = {2.0f, 2.0f, 2.0f};
     const float center[3] = {0.0f, 0.0f, 0.0f};
     const float up[3] = {0.0f, 0.0f, 1.0f};
-    matrix_4x4_view(uniform_buffer_object.view, pov, center, up);
+    matrix_4x4_view(window->uniform_buffer_object.view, pov, center, up);
 
     float aspect_ratio = window->window_extent.width / (float)window->window_extent.height;
-    matrix_4x4_perspective(uniform_buffer_object.projection, 45.0f * (acos(-1.0) / 180.0f), aspect_ratio, 0.1f, 10.0f);
+    matrix_4x4_perspective(window->uniform_buffer_object.projection, radians * 45.0f, aspect_ratio, 0.1f, 10.0f);
 
-    uniform_buffer_object.projection[1][1] *= -1.0f;
+    window->uniform_buffer_object.projection[1][1] *= -1.0f;
 
     void *uniform_buffer_memory = window->uniform_buffers_mapped[window->current_frame_index];
-    memcpy(uniform_buffer_memory, &uniform_buffer_object, sizeof(uniform_buffer_object));
+    memcpy(uniform_buffer_memory, &window->uniform_buffer_object, sizeof(window->uniform_buffer_object));
 
     VkCommandBuffer command_buffer = window->command_buffers[window->current_frame_index];
 
@@ -2284,7 +2308,7 @@ void window_render_triangle(Window *window)
         &window->descriptor_sets[window->current_frame_index], 0, NULL
     );
 
-    vkCmdDrawIndexed(command_buffer, index_count, 1, 0, 0, 0);
+    vkCmdDrawIndexed(command_buffer, window->index_count, 1, 0, 0, 0);
 }
 
 /*********************************************************************************************************************/
