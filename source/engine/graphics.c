@@ -90,15 +90,15 @@ struct Window
 
 static inline VkBool32 vulkan_debug_messenger_callback
 (
-    VkDebugUtilsMessageSeverityFlagBitsEXT severity, VkDebugUtilsMessageTypeFlagsEXT type,
-    const VkDebugUtilsMessengerCallbackDataEXT* callback_data, void* user_data
+    VkDebugUtilsMessageSeverityFlagBitsEXT message_severity_flags, VkDebugUtilsMessageTypeFlagsEXT message_type_flags,
+    const VkDebugUtilsMessengerCallbackDataEXT *callback_data, void *user_data
 );
 
-static uint32_t rate_physical_device_properties(VkPhysicalDevice physical_device);
-static uint32_t rate_physical_device_features(VkPhysicalDevice physical_device);
-static uint32_t rate_physical_device_memory(VkPhysicalDevice physical_device);
-static uint32_t rate_physical_device_queue_families(VkPhysicalDevice physical_device);
-static uint32_t rate_physical_device_extensions(VkPhysicalDevice physical_device);
+static uint32_t rate_physical_device_properties(const VkPhysicalDevice physical_device);
+static uint32_t rate_physical_device_features(const VkPhysicalDevice physical_device);
+static uint32_t rate_physical_device_memory(const VkPhysicalDevice physical_device);
+static uint32_t rate_physical_device_queue_families(const VkPhysicalDevice physical_device);
+static uint32_t rate_physical_device_extensions(const VkPhysicalDevice physical_device);
 
 /*********************************************************************************************************************/
 // Context Creation Function
@@ -145,7 +145,7 @@ struct Context *context_create()
     };
 #endif
 
-    size_t instance_layer_count = sizeof(instance_layers) / sizeof(instance_layers[0]);
+    const size_t instance_layer_count = sizeof(instance_layers) / sizeof(instance_layers[0]);
     instance_creation_information.enabledLayerCount = instance_layer_count;
     instance_creation_information.ppEnabledLayerNames = instance_layers;
 
@@ -182,12 +182,12 @@ struct Context *context_create()
     };
 #endif
 
-    size_t additional_instance_extension_count =
+    const size_t additional_instance_extension_count =
     (
         sizeof(additional_instance_extensions) / sizeof(additional_instance_extensions[0])
     );
 
-    size_t instance_extension_count = sdl_instance_extension_count + additional_instance_extension_count;
+    const size_t instance_extension_count = sdl_instance_extension_count + additional_instance_extension_count;
     const char **instance_extensions = malloc(instance_extension_count * sizeof(const char *));
     if (instance_extensions == NULL)
     {
@@ -311,8 +311,8 @@ struct Context *context_create()
     uint32_t best_score = 0;
     for (uint32_t physical_device_index = 0; physical_device_index < physical_device_count; ++physical_device_index)
     {
-        VkPhysicalDevice physical_device = physical_devices[physical_device_index];
-        uint32_t score =
+        VkPhysicalDevice const physical_device = physical_devices[physical_device_index];
+        const uint32_t score =
         (
             rate_physical_device_properties(physical_device) +
             rate_physical_device_features(physical_device) +
@@ -463,7 +463,7 @@ struct Context *context_create()
     };
 #endif
 
-    size_t logical_device_layer_count = sizeof(logical_device_layers) / sizeof(logical_device_layers[0]);
+    const size_t logical_device_layer_count = sizeof(logical_device_layers) / sizeof(logical_device_layers[0]);
 
     device_creation_information.enabledLayerCount = logical_device_layer_count;
     device_creation_information.ppEnabledLayerNames = logical_device_layers;
@@ -495,7 +495,7 @@ struct Context *context_create()
     };
 #endif
 
-    size_t logical_device_extension_count = sizeof(logical_device_extensions) / sizeof(logical_device_extensions[0]);
+    const size_t logical_device_extension_count = sizeof(logical_device_extensions) / sizeof(logical_device_extensions[0]);
 
     device_creation_information.enabledExtensionCount = logical_device_extension_count;
     device_creation_information.ppEnabledExtensionNames = logical_device_extensions;
@@ -540,22 +540,21 @@ void context_destroy(struct Context *context)
         return;
     }
 
+    VkInstance const vulkan_instance = context->vulkan_instance;
+
     vkDestroyDevice(context->logical_device, NULL);
 
-    if (context->vulkan_instance != NULL)
+    if (vulkan_instance != NULL)
     {
         PFN_vkDestroyDebugUtilsMessengerEXT debug_messenger_destruction_function =
         (
             (PFN_vkDestroyDebugUtilsMessengerEXT)
-            vkGetInstanceProcAddr(context->vulkan_instance, "vkDestroyDebugUtilsMessengerEXT")
+            vkGetInstanceProcAddr(vulkan_instance, "vkDestroyDebugUtilsMessengerEXT")
         );
 
         if (debug_messenger_destruction_function)
         {
-            debug_messenger_destruction_function
-            (
-                context->vulkan_instance, context->debug_messenger, NULL
-            );
+            debug_messenger_destruction_function(vulkan_instance, context->debug_messenger, NULL);
         }
         else
         {
@@ -563,7 +562,7 @@ void context_destroy(struct Context *context)
         }
     }
 
-    vkDestroyInstance(context->vulkan_instance, NULL);
+    vkDestroyInstance(vulkan_instance, NULL);
 
     free(context);
     context = NULL;
@@ -576,7 +575,7 @@ void context_destroy(struct Context *context)
 static inline VkBool32 vulkan_debug_messenger_callback
 (
     VkDebugUtilsMessageSeverityFlagBitsEXT message_severity_flags, VkDebugUtilsMessageTypeFlagsEXT message_type_flags,
-    const VkDebugUtilsMessengerCallbackDataEXT* callback_data, void* user_data
+    const VkDebugUtilsMessengerCallbackDataEXT *callback_data, void *user_data
 )
 {
     char type_string[64] = {0};
@@ -592,7 +591,7 @@ static inline VkBool32 vulkan_debug_messenger_callback
     {
         if (leading_comma)
         {
-            size_t length = strlen(type_string);
+            const size_t length = strlen(type_string);
             snprintf(type_string + length, sizeof(type_string) - length, ", VALIDATION");
         }
         else
@@ -606,7 +605,7 @@ static inline VkBool32 vulkan_debug_messenger_callback
     {
         if (leading_comma)
         {
-            size_t length = strlen(type_string);
+            const size_t length = strlen(type_string);
             snprintf(type_string + length, sizeof(type_string) - length, ", PERFORMANCE");
         }
         else
@@ -620,7 +619,7 @@ static inline VkBool32 vulkan_debug_messenger_callback
     {
         if (leading_comma)
         {
-            size_t length = strlen(type_string);
+            const size_t length = strlen(type_string);
             snprintf(type_string + length, sizeof(type_string) - length, ", DEVIVE_ADDRESS_BINDING");
         }
         else
@@ -657,7 +656,7 @@ static inline VkBool32 vulkan_debug_messenger_callback
 // Physical Device Criteria
 /*********************************************************************************************************************/
 
-static uint32_t rate_physical_device_properties(VkPhysicalDevice physical_device)
+static uint32_t rate_physical_device_properties(const VkPhysicalDevice physical_device)
 {
     uint32_t score = 0;
 
@@ -665,9 +664,9 @@ static uint32_t rate_physical_device_properties(VkPhysicalDevice physical_device
     vkGetPhysicalDeviceProperties(physical_device, &device_properties);
 
     // It would be nice to have the physical device support Vulkan version 1.3 at least
-    uint32_t api_version = device_properties.apiVersion;
-    uint32_t major_version = VK_VERSION_MAJOR(api_version);
-    uint32_t minor_version = VK_VERSION_MINOR(api_version);
+    const uint32_t api_version = device_properties.apiVersion;
+    const uint32_t major_version = VK_VERSION_MAJOR(api_version);
+    const uint32_t minor_version = VK_VERSION_MINOR(api_version);
     if (major_version >= 2 || (major_version == 1 && minor_version >= 3))
     {
         score += 500;
@@ -678,13 +677,13 @@ static uint32_t rate_physical_device_properties(VkPhysicalDevice physical_device
         score += 1000;
     }
 
-    VkPhysicalDeviceLimits limits = device_properties.limits;
+    const VkPhysicalDeviceLimits limits = device_properties.limits;
     score += limits.maxImageDimension2D;
 
     return score;
 }
 
-static uint32_t rate_physical_device_features(VkPhysicalDevice physical_device)
+static uint32_t rate_physical_device_features(const VkPhysicalDevice physical_device)
 {
     uint32_t score = 0;
 
@@ -704,7 +703,7 @@ static uint32_t rate_physical_device_features(VkPhysicalDevice physical_device)
     return score;
 }
 
-static uint32_t rate_physical_device_memory(VkPhysicalDevice physical_device)
+static uint32_t rate_physical_device_memory(const VkPhysicalDevice physical_device)
 {
     uint32_t score = 0;
 
@@ -714,7 +713,7 @@ static uint32_t rate_physical_device_memory(VkPhysicalDevice physical_device)
     uint32_t total_memory = 0;
     for (uint32_t memory_heap_index = 0; memory_heap_index < memory_properties.memoryHeapCount; memory_heap_index++)
     {
-        VkMemoryHeap memory_heap = memory_properties.memoryHeaps[memory_heap_index];
+        const VkMemoryHeap memory_heap = memory_properties.memoryHeaps[memory_heap_index];
         if (memory_heap.flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT)
         {
             // The total memory will be converted to megabytes
@@ -725,7 +724,7 @@ static uint32_t rate_physical_device_memory(VkPhysicalDevice physical_device)
     return total_memory / 10;
 }
 
-static uint32_t rate_physical_device_queue_families(VkPhysicalDevice physical_device)
+static uint32_t rate_physical_device_queue_families(const VkPhysicalDevice physical_device)
 {
     uint32_t score = 0;
 
@@ -764,9 +763,10 @@ static uint32_t rate_physical_device_queue_families(VkPhysicalDevice physical_de
     return score;
 }
 
-static uint32_t rate_physical_device_extensions(VkPhysicalDevice physical_device)
+static uint32_t rate_physical_device_extensions(const VkPhysicalDevice physical_device)
 {
     VkResult result;
+
     uint32_t score = 0;
 
     uint32_t extension_count;
@@ -810,32 +810,34 @@ static uint32_t rate_physical_device_extensions(VkPhysicalDevice physical_device
 // Window Functions
 /*********************************************************************************************************************/
 
-static inline uint8_t window_begin_frame(struct Window *window);
-static inline uint8_t window_end_frame(struct Window *window);
+static inline uint8_t window_begin_frame(struct Window *const window);
+static inline uint8_t window_end_frame(const struct Window *const window);
 
 static inline uint8_t memory_allocate
 (
-    struct Window *window, VkMemoryRequirements memory_requirements, VkMemoryPropertyFlags memory_properties,
-    VkDeviceMemory *memory
+    const struct Window *const window, const VkMemoryRequirements memory_requirements,
+    const VkMemoryPropertyFlags memory_properties, VkDeviceMemory *memory
 );
 
-static inline uint8_t command_start(struct Window *window, VkCommandBuffer *command_buffer);
-static inline uint8_t command_finish(struct Window *window, VkCommandBuffer command_buffer);
+static inline uint8_t command_start(const struct Window *const window, VkCommandBuffer *command_buffer);
+static inline uint8_t command_finish(const struct Window *const window, VkCommandBuffer command_buffer);
 
 static inline uint8_t buffer_create
 (
-    struct Window *window, VkDeviceSize buffer_size, VkBufferUsageFlags buffer_usages,
-    VkMemoryPropertyFlags memory_properties, VkBuffer *buffer, VkDeviceMemory *buffer_memory
+    const struct Window *const window, const VkDeviceSize buffer_size, const VkBufferUsageFlags buffer_usages,
+    const VkMemoryPropertyFlags memory_properties, VkBuffer *buffer, VkDeviceMemory *buffer_memory
 );
 
 static inline uint8_t buffer_copy
 (
-    struct Window *window, VkBuffer source_buffer, VkBuffer destination_buffer, VkDeviceSize buffer_size
+    const struct Window *const window, VkBuffer source_buffer, VkBuffer destination_buffer,
+    const VkDeviceSize buffer_size
 );
 
 static inline uint8_t image_load
 (
-    struct Window *window, const char *file_path, VkImage *texture_image, VkDeviceMemory *texture_image_memory
+    const struct Window *const window, const char *file_path, VkImage *texture_image,
+    VkDeviceMemory *texture_image_memory
 );
 
 /*********************************************************************************************************************/
@@ -844,7 +846,7 @@ static inline uint8_t image_load
 
 struct Window *window_create
 (
-    const char *title, unsigned int initial_width, unsigned int initial_height, struct Context *context
+    const char *title, const unsigned int initial_width, const unsigned int initial_height, struct Context *context
 )
 {
     VkResult result;
@@ -1598,7 +1600,7 @@ struct Window *window_create
     // Texture Image Creation
     /*****************************************************************************************************************/
 
-    const char *image_file_path = "resources/images/textures/squares.png";
+    const char *const image_file_path = "resources/images/textures/squares.png";
     if (image_load(window, image_file_path, &window->texture_image, &window->texture_image_memory) == 0)
     {
         log_error("Failed to load texture image");
@@ -1700,8 +1702,8 @@ struct Window *window_create
     // Vertex Buffer Creation
     /*****************************************************************************************************************/
 
-    VkDeviceSize vertex_buffer_size = 8 * window->vertex_count * sizeof(float);
-    
+    const VkDeviceSize vertex_buffer_size = 8 * window->vertex_count * sizeof(float);
+
     VkBuffer vertex_staging_buffer;
     VkDeviceMemory vertex_staging_buffer_memory;
 
@@ -1770,7 +1772,7 @@ struct Window *window_create
     // Index Buffer Creation
     /*****************************************************************************************************************/
 
-    VkDeviceSize index_buffer_size = window->index_count * sizeof(unsigned short);
+    const VkDeviceSize index_buffer_size = window->index_count * sizeof(unsigned short);
 
     VkBuffer index_staging_buffer;
     VkDeviceMemory index_staging_buffer_memory;
@@ -2153,7 +2155,7 @@ struct Window *window_create
 // Window Frame Rendering Function
 /*********************************************************************************************************************/
 
-unsigned char window_update(struct Window *window)
+unsigned char window_update(struct Window *const window)
 {
     if (window_end_frame(window) == 0)
     {
@@ -2229,7 +2231,7 @@ static inline uint8_t window_begin_frame(struct Window *window)
     return 1;
 }
 
-static inline uint8_t window_end_frame(struct Window *window)
+static inline uint8_t window_end_frame(const struct Window *const window)
 {
     VkResult result;
 
@@ -2294,9 +2296,9 @@ static inline uint8_t window_end_frame(struct Window *window)
 // Window Rendering Function
 /*********************************************************************************************************************/
 
-void window_render_something(struct Window *window)
+void window_render_something(struct Window *const window)
 {
-    VkCommandBuffer command_buffer = window->command_buffers[window->frame_index];
+    VkCommandBuffer const command_buffer = window->command_buffers[window->frame_index];
 
     VkRenderPassBeginInfo render_pass_beginning_information = {};
     render_pass_beginning_information.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -2465,8 +2467,8 @@ void window_destroy(struct Window *window)
 
 static inline uint8_t memory_allocate
 (
-    struct Window *window, VkMemoryRequirements memory_requirements, VkMemoryPropertyFlags memory_properties,
-    VkDeviceMemory *memory
+    const struct Window *const window, const VkMemoryRequirements memory_requirements,
+    const VkMemoryPropertyFlags memory_properties, VkDeviceMemory *memory
 )
 {
     VkResult result;
@@ -2486,7 +2488,7 @@ static inline uint8_t memory_allocate
         ++physical_device_memory_type_index
     )
     {
-        VkMemoryType physical_device_memory_type =
+        const VkMemoryType physical_device_memory_type =
         (
             physical_device_memory_properties.memoryTypes[physical_device_memory_type_index]
         );
@@ -2522,7 +2524,7 @@ static inline uint8_t memory_allocate
 // Single Time Command Buffer Functions
 /*********************************************************************************************************************/
 
-static inline uint8_t command_start(struct Window *window, VkCommandBuffer *command_buffer)
+static inline uint8_t command_start(const struct Window *const window, VkCommandBuffer *command_buffer)
 {
     VkResult result;
 
@@ -2558,7 +2560,7 @@ static inline uint8_t command_start(struct Window *window, VkCommandBuffer *comm
     return 1;
 }
 
-static inline uint8_t command_finish(struct Window *window, VkCommandBuffer command_buffer)
+static inline uint8_t command_finish(const struct Window *const window, VkCommandBuffer command_buffer)
 {
     VkResult result;
 
@@ -2602,8 +2604,8 @@ static inline uint8_t command_finish(struct Window *window, VkCommandBuffer comm
 
 static inline uint8_t buffer_create
 (
-    struct Window *window, VkDeviceSize buffer_size, VkBufferUsageFlags buffer_usages,
-    VkMemoryPropertyFlags memory_properties, VkBuffer *buffer, VkDeviceMemory *buffer_memory
+    const struct Window *const window, const VkDeviceSize buffer_size, const VkBufferUsageFlags buffer_usages,
+    const VkMemoryPropertyFlags memory_properties, VkBuffer *buffer, VkDeviceMemory *buffer_memory
 )
 {
     VkResult result;
@@ -2648,7 +2650,8 @@ static inline uint8_t buffer_create
 
 static inline uint8_t buffer_copy
 (
-    struct Window *window, VkBuffer source_buffer, VkBuffer destination_buffer, VkDeviceSize buffer_size
+    const struct Window *const window, VkBuffer source_buffer, VkBuffer destination_buffer,
+    const VkDeviceSize buffer_size
 )
 {
     VkCommandBuffer command_buffer;
@@ -2677,18 +2680,19 @@ static inline uint8_t buffer_copy
 
 static inline uint8_t image_layout_transition
 (
-    struct Window *window, VkImage image, VkFormat format, VkImageLayout previous_image_layout,
-    VkImageLayout next_image_layout
+    const struct Window *const window, VkImage image, const VkFormat format, const VkImageLayout previous_image_layout,
+    const VkImageLayout next_image_layout
 );
 
 static inline uint8_t buffer_copy_to_image
 (
-    struct Window *window, VkBuffer buffer, VkImage image, uint32_t width, uint32_t height
+    const struct Window *const window, VkBuffer buffer, VkImage image, const uint32_t width, const uint32_t height
 );
 
 static inline uint8_t image_load
 (
-    struct Window *window, const char *file_path, VkImage *texture_image, VkDeviceMemory *texture_image_memory
+    const struct Window *const window, const char *file_path, VkImage *texture_image,
+    VkDeviceMemory *texture_image_memory
 )
 {
     VkResult result;
@@ -2851,8 +2855,8 @@ static inline uint8_t image_load
 
 static inline uint8_t image_layout_transition
 (
-    struct Window *window, VkImage image, VkFormat format, VkImageLayout previous_image_layout,
-    VkImageLayout next_image_layout
+    const struct Window *const window, VkImage image, const VkFormat format, const VkImageLayout previous_image_layout,
+    const VkImageLayout next_image_layout
 )
 {
     VkCommandBuffer command_buffer;
@@ -2930,7 +2934,7 @@ static inline uint8_t image_layout_transition
 
 static inline uint8_t buffer_copy_to_image
 (
-    struct Window *window, VkBuffer buffer, VkImage image, uint32_t width, uint32_t height
+    const struct Window *const window, VkBuffer buffer, VkImage image, const uint32_t width, const uint32_t height
 )
 {
     VkCommandBuffer command_buffer;

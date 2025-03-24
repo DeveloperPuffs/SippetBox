@@ -26,19 +26,19 @@ struct Window;
  */
 struct Window *window_create
 (
-    const char *title, unsigned int initial_width, unsigned int initial_height, struct Context *context
+    const char *title, const unsigned int initial_width, const unsigned int initial_height, struct Context *context
 );
 
 /**
  * Renders a frame on a `Window` by submitting the recorded rendering commands for execution, and then for presenting
  * after the rendering operations have been executed on the GPU. Returns `1` for success and `0` for failure.
  */
-unsigned char window_update(struct Window *window);
+unsigned char window_update(struct Window *const window);
 
 /**
  * Renders something onto the window :)
  */
-void window_render_something(struct Window *window);
+void window_render_something(struct Window *const window);
 
 /**
  * Destroys an instance of `Window` by freeing its resources. Closes the SDL window associated with the given instance.

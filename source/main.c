@@ -12,8 +12,8 @@ struct State
     struct Window *window;
 };
 
-static int update(struct State *state);
-static void terminate(struct State *state, int exit_code);
+static int update(struct State *const state);
+static void terminate(struct State *const state, const int exit_code);
 
 int main()
 {
@@ -53,7 +53,7 @@ int main()
     terminate(&state, EXIT_SUCCESS);
 }
 
-static int update(struct State *state)
+static int update(struct State *const state)
 {
     SDL_Event event;
     while (SDL_PollEvent(&event) == true)
@@ -75,12 +75,12 @@ static int update(struct State *state)
     return 1;
 }
 
-static void terminate(struct State *state, int exit_code)
+static void terminate(struct State *const state, const int exit_code)
 {
     window_destroy(state->window);
     context_destroy(state->context);
     SDL_Vulkan_UnloadLibrary();
     SDL_Quit();
-    
+
     exit(exit_code);
 }
