@@ -8,6 +8,19 @@
 
 #include <engine/files.h>
 
+static inline void file_close(const char *type, FILE *file)
+{
+    const int result = fclose(file);
+    if (result != 0)
+    {
+        log_warning("Failed to close %s file, error code: %d", type, result);
+    }
+}
+
+/*********************************************************************************************************************/
+// Image Handling Functions
+/*********************************************************************************************************************/
+
 static unsigned char image_create_png(FILE *file, struct Image *image);
 
 struct Image *image_create(const char *const path)
@@ -41,11 +54,7 @@ struct Image *image_create(const char *const path)
     if (image == NULL)
     {
         log_error("Failed to allocate memory for image instance");
-        if (fclose(file) != 0)
-        {
-            log_warning("Failed to close image: %s", path);
-        }
-
+        file_close("image", file);
         free(extension);
         return NULL;
     }
@@ -58,11 +67,7 @@ struct Image *image_create(const char *const path)
     else
     {
         log_error("Unsupported image extension '%s'", extension);
-        if (fclose(file) != 0)
-        {
-            log_warning("Failed to close image file: %s", path);
-        }
-
+        file_close("image", file);
         image_destroy(image);
         free(extension);
         return NULL;
@@ -70,10 +75,7 @@ struct Image *image_create(const char *const path)
 
     free(extension);
     const unsigned char image_creation_result = image_creation_function(file, image);
-    if (fclose(file) != 0)
-    {
-        log_warning("Failed to close image: %s", path);
-    }
+    file_close("image", file);
 
     if (image_creation_result == 0)
     {
@@ -185,6 +187,10 @@ void image_destroy(struct Image *const image)
     free(image);
 }
 
+/*********************************************************************************************************************/
+// Shader Handling Functions
+/*********************************************************************************************************************/
+
 struct Shader *shader_create(const char *const path)
 {
     FILE *file = fopen(path, "rb");
@@ -198,22 +204,14 @@ struct Shader *shader_create(const char *const path)
     if (shader == NULL)
     {
         log_error("Failed to allocate memory for shader instance");
-        if (fclose(file) != 0)
-        {
-            log_warning("Failed to close shader: %s", path);
-        }
-
+        file_close("shader", file);
         return NULL;
     }
 
     if (fseek(file, 0, SEEK_END) != 0)
     {
         log_error("Failed to seek to end of shader: %s", path);
-        if (fclose(file) != 0)
-        {
-            log_warning("Failed to close shader: %s", path);
-        }
-
+        file_close("shader", file);
         shader_destroy(shader);
         return NULL;
     }
@@ -222,11 +220,7 @@ struct Shader *shader_create(const char *const path)
     if (size == -1L)
     {
         log_error("Failed to determine shader size: %s", path);
-        if (fclose(file) != 0)
-        {
-            log_warning("Failed to close shader: %s", path);
-        }
-
+        file_close("shader", file);
         shader_destroy(shader);
         return NULL;
     }
@@ -234,11 +228,7 @@ struct Shader *shader_create(const char *const path)
     if (size % 4 != 0)
     {
         log_error("Shader size (%d) is not aligned: %s", shader->size, path);
-        if (fclose(file) != 0)
-        {
-            log_warning("Failed to close shader: %s", path);
-        }
-
+        file_close("shader", file);
         shader_destroy(shader);
         return NULL;
     }
@@ -246,11 +236,7 @@ struct Shader *shader_create(const char *const path)
     if (fseek(file, 0, SEEK_SET) != 0)
     {
         log_error("Failed to rewind shader: %s", path);
-        if (fclose(file) != 0)
-        {
-            log_warning("Failed to close shader: %s", path);
-        }
-
+        file_close("shader", file);
         shader_destroy(shader);
         return NULL;
     }
@@ -260,11 +246,7 @@ struct Shader *shader_create(const char *const path)
     if (shader->data == NULL)
     {
         log_error("Failed to allocate memory for shader data");
-        if (fclose(file) != 0)
-        {
-            log_warning("Failed to close shader: %s", path);
-        }
-
+        file_close("shader", file);
         shader_destroy(shader);
         return NULL;
     }
@@ -272,20 +254,12 @@ struct Shader *shader_create(const char *const path)
     if (fread(shader->data, 1, size, file) != size)
     {
         log_error("Failed to read shader: %s", path);
-        if (fclose(file) != 0)
-        {
-            log_warning("Failed to close shader: %s", path);
-        }
-
+        file_close("shader", file);
         shader_destroy(shader);
         return NULL;
     }
 
-    if (fclose(file) != 0)
-    {
-        log_warning("Failed to close shader: %s", path);
-    }
-
+    file_close("shader", file);
     return shader;
 }
 
