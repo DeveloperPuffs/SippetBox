@@ -1,2 +1,9 @@
+# Ignore these folders
 build/
 .vscode/
+
+# Ignored compiled shaders
+*.spv
+!*.vert
+!*.frag
+!*.comp
