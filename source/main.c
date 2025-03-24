@@ -6,18 +6,18 @@
 #include <engine/logging.h>
 #include <engine/graphics.h>
 
-typedef struct
+struct State
 {
-    Context *context;
-    Window *window;
-} State;
+    struct Context *context;
+    struct Window *window;
+};
 
-static int update(State *state);
-static void terminate(State *state, int exit_code);
+static int update(struct State *state);
+static void terminate(struct State *state, int exit_code);
 
 int main()
 {
-    State state = {};
+    struct State state = {};
     state.context = NULL;
     state.window = NULL;
 
@@ -57,7 +57,7 @@ int main()
 
 static void render(void *user_data);
 
-static int update(State *state)
+static int update(struct State *state)
 {
     SDL_Event event;
     while (SDL_PollEvent(&event) == true)
@@ -79,12 +79,12 @@ static int update(State *state)
 
 static void render(void *user_data)
 {
-    State *state = (State *)user_data;
-    window_render_triangle(state->window);
+    struct State *state = (struct State *)user_data;
+    window_render_something(state->window);
     return;
 }
 
-static void terminate(State *state, int exit_code)
+static void terminate(struct State *state, int exit_code)
 {
     window_destroy(state->window);
     context_destroy(state->context);

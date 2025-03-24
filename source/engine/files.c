@@ -8,9 +8,9 @@
 
 #include <engine/files.h>
 
-static unsigned char image_create_png(FILE *file, Image *image);
+static unsigned char image_create_png(FILE *file, struct Image *image);
 
-Image *image_create(const char *const path)
+struct Image *image_create(const char *const path)
 {
     const char *dot_position = strrchr(path, '.');
     if (dot_position == NULL)
@@ -37,7 +37,7 @@ Image *image_create(const char *const path)
         return NULL;
     }
 
-    Image *image = calloc(1, sizeof(Image));
+    struct Image *image = calloc(1, sizeof(struct Image));
     if (image == NULL)
     {
         log_error("Failed to allocate memory for image instance");
@@ -50,7 +50,7 @@ Image *image_create(const char *const path)
         return NULL;
     }
 
-    unsigned char (*image_creation_function)(FILE *file, Image *image);
+    unsigned char (*image_creation_function)(FILE *file, struct Image *image);
     if (strcmp(extension, ".png") == 0)
     {
         image_creation_function = image_create_png;
@@ -85,7 +85,7 @@ Image *image_create(const char *const path)
     return image;
 }
 
-static unsigned char image_create_png(FILE *file, Image *image)
+static unsigned char image_create_png(FILE *file, struct Image *image)
 {
     png_structp reader = png_create_read_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
     if (reader == NULL)
@@ -169,7 +169,7 @@ static unsigned char image_create_png(FILE *file, Image *image)
     return 1;
 }
 
-void image_destroy(Image *const image)
+void image_destroy(struct Image *const image)
 {
     if (image == NULL)
     {
@@ -185,7 +185,7 @@ void image_destroy(Image *const image)
     free(image);
 }
 
-Shader *shader_create(const char *const path)
+struct Shader *shader_create(const char *const path)
 {
     FILE *file = fopen(path, "rb");
     if (file == NULL)
@@ -194,7 +194,7 @@ Shader *shader_create(const char *const path)
         return NULL;
     }
 
-    Shader *shader = calloc(1, sizeof(Shader));
+    struct Shader *shader = calloc(1, sizeof(struct Shader));
     if (shader == NULL)
     {
         log_error("Failed to allocate memory for shader instance");
@@ -289,7 +289,7 @@ Shader *shader_create(const char *const path)
     return shader;
 }
 
-void shader_destroy(Shader *const shader)
+void shader_destroy(struct Shader *const shader)
 {
     if (shader == NULL)
     {

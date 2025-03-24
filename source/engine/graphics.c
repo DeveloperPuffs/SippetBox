@@ -18,7 +18,7 @@
 // Context and Window Definitions
 /*********************************************************************************************************************/
 
-typedef struct Context
+struct Context
 {
     VkInstance vulkan_instance;
     VkDebugUtilsMessengerEXT debug_messenger;
@@ -28,11 +28,11 @@ typedef struct Context
     VkDevice logical_device;
     VkQueue graphics_queue;
     VkQueue present_queue;
-} Context;
+};
 
-typedef struct Window
+struct Window
 {
-    Context *context;
+    struct Context *context;
     SDL_Window *sdl_window_handle;
     VkExtent2D window_extent;
     VkSurfaceKHR surface;
@@ -81,7 +81,7 @@ typedef struct Window
         float view[4][4];
         float projection[4][4];
     } uniform_buffer_object;
-} Window;
+};
 
 /*********************************************************************************************************************/
 // Context Functions
@@ -103,11 +103,11 @@ static uint32_t rate_physical_device_extensions(VkPhysicalDevice physical_device
 // Context Creation Function
 /*********************************************************************************************************************/
 
-Context *context_create()
+struct Context *context_create()
 {
     VkResult result;
 
-    Context *context = calloc(1, sizeof(Context));
+    struct Context *context = calloc(1, sizeof(struct Context));
     if (context == NULL)
     {
         log_error("Failed to allocate memory for context instance");
@@ -532,7 +532,7 @@ Context *context_create()
 // Context Destruction Function
 /*********************************************************************************************************************/
 
-void context_destroy(Context *context)
+void context_destroy(struct Context *context)
 {
     if (context == NULL)
     {
@@ -807,36 +807,36 @@ static uint32_t rate_physical_device_extensions(VkPhysicalDevice physical_device
 // Window Functions
 /*********************************************************************************************************************/
 
-static inline int memory_allocate
+static inline unsigned char memory_allocate
 (
-    Window *window, VkMemoryRequirements memory_requirements, VkMemoryPropertyFlags memory_properties,
+    struct Window *window, VkMemoryRequirements memory_requirements, VkMemoryPropertyFlags memory_properties,
     VkDeviceMemory *memory
 );
 
-static inline int command_start(Window *window, VkCommandBuffer *command_buffer);
-static inline int command_finish(Window *window, VkCommandBuffer command_buffer);
+static inline unsigned char command_start(struct Window *window, VkCommandBuffer *command_buffer);
+static inline unsigned char command_finish(struct Window *window, VkCommandBuffer command_buffer);
 
-static inline int buffer_create
+static inline unsigned char buffer_create
 (
-    Window *window, VkDeviceSize buffer_size, VkBufferUsageFlags buffer_usages,
+    struct Window *window, VkDeviceSize buffer_size, VkBufferUsageFlags buffer_usages,
     VkMemoryPropertyFlags memory_properties, VkBuffer *buffer, VkDeviceMemory *buffer_memory
 );
 
-static inline int buffer_copy
+static inline unsigned char buffer_copy
 (
-    Window *window, VkBuffer source_buffer, VkBuffer destination_buffer, VkDeviceSize buffer_size
+    struct Window *window, VkBuffer source_buffer, VkBuffer destination_buffer, VkDeviceSize buffer_size
 );
 
-static inline int image_load
+static inline unsigned char image_load
 (
-    Window *window, const char *file_path, VkImage *texture_image, VkDeviceMemory *texture_image_memory
+    struct Window *window, const char *file_path, VkImage *texture_image, VkDeviceMemory *texture_image_memory
 );
 
 /*********************************************************************************************************************/
 // Window Creation Function
 /*********************************************************************************************************************/
 
-Window *window_create(const char *title, int initial_width, int initial_height, Context *context)
+struct Window *window_create(const char *title, int initial_width, int initial_height, struct Context *context)
 {
     VkResult result;
 
@@ -846,7 +846,7 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
         return NULL;
     }
 
-    Window *window = calloc(1, sizeof(Window));
+    struct Window *window = calloc(1, sizeof(struct Window));
     if (window == NULL)
     {
         log_error("Failed to allocate memory for window instance");
@@ -1214,7 +1214,7 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
     for (size_t shader_module_index = 0; shader_module_index < window->shader_module_count; ++shader_module_index)
     {
         const char *shader_file_path = shader_file_paths[shader_module_index];
-        Shader *shader = shader_create(shader_file_path);
+        struct Shader *shader = shader_create(shader_file_path);
         if (shader == NULL)
         {
             log_error("Failed to create shader: %s", shader_file_path);
@@ -2133,7 +2133,7 @@ Window *window_create(const char *title, int initial_width, int initial_height, 
 // Window Frame Rendering Function
 /*********************************************************************************************************************/
 
-int window_render_frame(Window *window, void (*callback)(void *user_data), void *user_data)
+int window_render_frame(struct Window *window, void (*callback)(void *user_data), void *user_data)
 {
     VkResult result;
 
@@ -2266,10 +2266,10 @@ int window_render_frame(Window *window, void (*callback)(void *user_data), void 
 }
 
 /*********************************************************************************************************************/
-// Window Triangle Rendering Function
+// Window Rendering Function
 /*********************************************************************************************************************/
 
-void window_render_triangle(Window *window)
+void window_render_something(struct Window *window)
 {
     const float radians = acos(-1.0) / 180.0f;
 
@@ -2315,7 +2315,7 @@ void window_render_triangle(Window *window)
 // Window Destruction Function
 /*********************************************************************************************************************/
 
-void window_destroy(Window *window)
+void window_destroy(struct Window *window)
 {
     if (window == NULL)
     {
@@ -2360,6 +2360,9 @@ void window_destroy(Window *window)
     vkDestroyBuffer(logical_device, window->vertex_buffer, NULL);
     vkFreeMemory(logical_device, window->vertex_buffer_memory, NULL);
 
+    free(window->indices);
+    free(window->vertices);
+
     vkDestroySampler(logical_device, window->texture_sampler, NULL);
     vkDestroyImageView(logical_device, window->texture_image_view, NULL);
     vkDestroyImage(logical_device, window->texture_image, NULL);
@@ -2402,9 +2405,9 @@ void window_destroy(Window *window)
 // Memory Allocation Function
 /*********************************************************************************************************************/
 
-static inline int memory_allocate
+static inline unsigned char memory_allocate
 (
-    Window *window, VkMemoryRequirements memory_requirements, VkMemoryPropertyFlags memory_properties,
+    struct Window *window, VkMemoryRequirements memory_requirements, VkMemoryPropertyFlags memory_properties,
     VkDeviceMemory *memory
 )
 {
@@ -2461,7 +2464,7 @@ static inline int memory_allocate
 // Single Time Command Buffer Functions
 /*********************************************************************************************************************/
 
-static inline int command_start(Window *window, VkCommandBuffer *command_buffer)
+static inline unsigned char command_start(struct Window *window, VkCommandBuffer *command_buffer)
 {
     VkResult result;
 
@@ -2497,7 +2500,7 @@ static inline int command_start(Window *window, VkCommandBuffer *command_buffer)
     return 1;
 }
 
-static inline int command_finish(Window *window, VkCommandBuffer command_buffer)
+static inline unsigned char command_finish(struct Window *window, VkCommandBuffer command_buffer)
 {
     VkResult result;
 
@@ -2539,9 +2542,9 @@ static inline int command_finish(Window *window, VkCommandBuffer command_buffer)
 // Buffer Creation Function
 /*********************************************************************************************************************/
 
-static inline int buffer_create
+static inline unsigned char buffer_create
 (
-    Window *window, VkDeviceSize buffer_size, VkBufferUsageFlags buffer_usages,
+    struct Window *window, VkDeviceSize buffer_size, VkBufferUsageFlags buffer_usages,
     VkMemoryPropertyFlags memory_properties, VkBuffer *buffer, VkDeviceMemory *buffer_memory
 )
 {
@@ -2585,9 +2588,9 @@ static inline int buffer_create
 // Buffer Copy Function
 /*********************************************************************************************************************/
 
-static inline int buffer_copy
+static inline unsigned char buffer_copy
 (
-    Window *window, VkBuffer source_buffer, VkBuffer destination_buffer, VkDeviceSize buffer_size
+    struct Window *window, VkBuffer source_buffer, VkBuffer destination_buffer, VkDeviceSize buffer_size
 )
 {
     VkCommandBuffer command_buffer;
@@ -2614,25 +2617,25 @@ static inline int buffer_copy
 // PNG Image to Texture Image and Texture Image Memory Function
 /*********************************************************************************************************************/
 
-static inline int image_layout_transition
+static inline unsigned char image_layout_transition
 (
-    Window *window, VkImage image, VkFormat format, VkImageLayout previous_image_layout,
+    struct Window *window, VkImage image, VkFormat format, VkImageLayout previous_image_layout,
     VkImageLayout next_image_layout
 );
 
-static inline int buffer_copy_to_image
+static inline unsigned char buffer_copy_to_image
 (
-    Window *window, VkBuffer buffer, VkImage image, uint32_t width, uint32_t height
+    struct Window *window, VkBuffer buffer, VkImage image, uint32_t width, uint32_t height
 );
 
-static inline int image_load
+static inline unsigned char image_load
 (
-    Window *window, const char *file_path, VkImage *texture_image, VkDeviceMemory *texture_image_memory
+    struct Window *window, const char *file_path, VkImage *texture_image, VkDeviceMemory *texture_image_memory
 )
 {
     VkResult result;
 
-    Image *image = image_create(file_path);
+    struct Image *image = image_create(file_path);
     if (image == NULL)
     {
         log_error("Failed to create image");
@@ -2788,9 +2791,9 @@ static inline int image_load
     return 1;
 }
 
-static inline int image_layout_transition
+static inline unsigned char image_layout_transition
 (
-    Window *window, VkImage image, VkFormat format, VkImageLayout previous_image_layout,
+    struct Window *window, VkImage image, VkFormat format, VkImageLayout previous_image_layout,
     VkImageLayout next_image_layout
 )
 {
@@ -2867,7 +2870,10 @@ static inline int image_layout_transition
     return 1;
 }
 
-static inline int buffer_copy_to_image(Window *window, VkBuffer buffer, VkImage image, uint32_t width, uint32_t height)
+static inline unsigned char buffer_copy_to_image
+(
+    struct Window *window, VkBuffer buffer, VkImage image, uint32_t width, uint32_t height
+)
 {
     VkCommandBuffer command_buffer;
     if (command_start(window, &command_buffer) == 0)
