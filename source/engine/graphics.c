@@ -292,7 +292,7 @@ struct Context *context_create()
         return NULL;
     }
 
-    VkPhysicalDevice *physical_devices = malloc(physical_device_count * sizeof(VkPhysicalDevice));
+    VkPhysicalDevice *const physical_devices = malloc(physical_device_count * sizeof(VkPhysicalDevice));
     if (physical_devices == NULL)
     {
         log_error("Failed to allocate memory for physical devices");
@@ -345,7 +345,7 @@ struct Context *context_create()
     uint32_t queue_family_count = 0;
     vkGetPhysicalDeviceQueueFamilyProperties(context->physical_device, &queue_family_count, NULL);
 
-    VkQueueFamilyProperties *queue_families = malloc(queue_family_count * sizeof(VkQueueFamilyProperties));
+    VkQueueFamilyProperties *const queue_families = malloc(queue_family_count * sizeof(VkQueueFamilyProperties));
     if (queue_families == NULL)
     {
         log_error("Failed to allocate memory for queue families");
@@ -729,7 +729,7 @@ static uint32_t rate_physical_device_queue_families(const VkPhysicalDevice physi
     uint32_t queue_family_count;
     vkGetPhysicalDeviceQueueFamilyProperties(physical_device, &queue_family_count, NULL);
 
-    VkQueueFamilyProperties *queue_families = malloc(queue_family_count * sizeof(VkQueueFamilyProperties));
+    VkQueueFamilyProperties *const queue_families = malloc(queue_family_count * sizeof(VkQueueFamilyProperties));
     if (queue_families == NULL)
     {
         log_error("Failed to allocate memory for physical device queue families");
@@ -764,7 +764,6 @@ static uint32_t rate_physical_device_queue_families(const VkPhysicalDevice physi
 static uint32_t rate_physical_device_extensions(const VkPhysicalDevice physical_device)
 {
     VkResult result;
-
     uint32_t score = 0;
 
     uint32_t extension_count;
@@ -775,7 +774,7 @@ static uint32_t rate_physical_device_extensions(const VkPhysicalDevice physical_
         return score;
     }
 
-    VkExtensionProperties *extensions = malloc(extension_count * sizeof(VkExtensionProperties));
+    VkExtensionProperties *const extensions = malloc(extension_count * sizeof(VkExtensionProperties));
     if (extensions == NULL)
     {
         log_error("Failed to allocate memory for physical device extensions");
@@ -927,7 +926,7 @@ struct Window *window_create
         return NULL;
     }
 
-    VkSurfaceFormatKHR *surface_formats = malloc(surface_format_count * sizeof(VkSurfaceFormatKHR));
+    VkSurfaceFormatKHR *const surface_formats = malloc(surface_format_count * sizeof(VkSurfaceFormatKHR));
 
     if (surface_formats == NULL)
     {

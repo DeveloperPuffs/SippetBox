@@ -33,7 +33,7 @@ struct Image *image_create(const char *const path)
     }
 
     const size_t extension_length = strlen(dot_position) + 1;
-    char *extension = (char *)malloc(extension_length * sizeof(char));
+    char *const extension = (char *)malloc(extension_length * sizeof(char));
     if (extension == NULL)
     {
         log_error("Failed to allocate memory for image extension string");
@@ -50,7 +50,7 @@ struct Image *image_create(const char *const path)
         return NULL;
     }
 
-    struct Image *image = calloc(1, sizeof(struct Image));
+    struct Image *const image = calloc(1, sizeof(struct Image));
     if (image == NULL)
     {
         log_error("Failed to allocate memory for image instance");
@@ -74,16 +74,15 @@ struct Image *image_create(const char *const path)
     }
 
     free(extension);
-    const unsigned char image_creation_result = image_creation_function(file, image);
-    file_close("image", file);
-
-    if (image_creation_result == 0)
+    if (image_creation_function(file, image) == 0)
     {
         log_error("Failed to create image with: %s", path);
+        file_close("image", file);
         image_destroy(image);
         return NULL;
     }
 
+    file_close("image", file);
     return image;
 }
 
@@ -200,7 +199,7 @@ struct Shader *shader_create(const char *const path)
         return NULL;
     }
 
-    struct Shader *shader = calloc(1, sizeof(struct Shader));
+    struct Shader *const shader = calloc(1, sizeof(struct Shader));
     if (shader == NULL)
     {
         log_error("Failed to allocate memory for shader instance");
@@ -278,16 +277,31 @@ void shader_destroy(struct Shader *const shader)
 // Object Handling Functions
 /*********************************************************************************************************************/
 
-static uint8_t push_vertex
+static unsigned char array_push
 (
-    const float x, const float y, const float z, unsigned int *const vertex_count, float **const vertices,
-    uint32_t *const vertex_capacity
-);
+    const void *const push_elements, const unsigned long push_count, const unsigned long element_size,
+    unsigned long *const array_count, unsigned long *const array_capacity, void ***const array
+)
+{
+    if (*array_count + push_count > *array_capacity)
+    {
+        *array_capacity = (*array_capacity == 0) ? push_count : *array_capacity * 2;
 
-static uint8_t push_index
-(
-    const unsigned int index, unsigned int *const index_count, unsigned int **const indices, uint32_t *const index_capacity
-);
+        void *reallocated_array = realloc(*array, *array_capacity * element_size);
+        if (reallocated_array == NULL)
+        {
+            log_error("Failed to allocate memory for resizing array");
+            return 0;
+        }
+
+        *array = reallocated_array;
+    }
+
+    memcpy((char *)(*array) + (*array_count) * element_size, push_elements, push_count * element_size);
+    *array_count += push_count;
+
+    return 1;
+}
 
 struct Object *object_create(const char *const path)
 {
@@ -298,7 +312,7 @@ struct Object *object_create(const char *const path)
         return NULL;
     }
 
-    struct Object *object = calloc(1, sizeof(struct Object));
+    struct Object *const object = calloc(1, sizeof(struct Object));
     if (object == NULL)
     {
         log_error("Failed to allocate memory for object instance");
@@ -306,63 +320,211 @@ struct Object *object_create(const char *const path)
         return NULL;
     }
 
-    uint32_t vertex_capacity = 0;
-    uint32_t index_capacity = 0;
-
     // Please don't use a `.obj` model with over 256 characters per line :(
     char line[256];
 
-    uint32_t line_number = 0;
+    size_t line_number = 0;
     while (fgets(line, sizeof(line), file))
     {
         line_number++;
 
         if (strncmp(line, "v ", 2) == 0)
         {
-            float x, y, z;
-            if (sscanf(line, "v %f %f %f", &x, &y, &z) == 3)
+            float vertex[3] = {0.0f, 0.0f, 0.0f};
+            if (sscanf(line, "v %f %f %f", &vertex[0], &vertex[1], &vertex[2]) != 3)
             {
-                push_vertex(x, y, z, &object->vertex_count, &object->vertices, &vertex_capacity);
+                log_error("Failed to parse vertex (v) at line %d", line_number);
+                object_destroy(object);
+                return NULL;
             }
-            else
+
+            if
+            (
+                array_push
+                (
+                    vertex, 3, sizeof(float), &object->vertex_count, &object->vertex_capacity,
+                    (void ***)object->vertices
+                ) == 0
+            )
             {
-                log_error("Failed to parse 'v' line %d", line_number);
+                log_error("Failed to push vertex at line %d", line_number);
                 object_destroy(object);
                 return NULL;
             }
         }
         else if (strncmp(line, "f ", 2) == 0)
         {
-            unsigned int vertex1, vertex2, vertex3;
-            if (sscanf(line, "f %u %u %u", &vertex1, &vertex2, &vertex3) == 3)
+            unsigned int vertex_indices[3] = {1, 1, 1};
+            unsigned int texture_coordinate_indices[3] = {1, 1, 1};
+            unsigned int normal_indices[3] = {1, 1, 1};
+
+            if
+            (
+                sscanf
+                (
+                    line, "f %u %u %u",
+                    &vertex_indices[0],
+                    &vertex_indices[1],
+                    &vertex_indices[2]
+                ) != 3 &&
+                sscanf
+                (
+                    line, "f %u/%u/%u %u/%u/%u %u/%u/%u",
+                    &vertex_indices[0], &texture_coordinate_indices[0], &normal_indices[0],
+                    &vertex_indices[1], &texture_coordinate_indices[1], &normal_indices[1],
+                    &vertex_indices[2], &texture_coordinate_indices[2], &normal_indices[2]
+                ) != 9 &&
+                sscanf
+                (
+                    line, "f %u//%u %u//%u %u//%u",
+                    &vertex_indices[0], &normal_indices[0],
+                    &vertex_indices[1], &normal_indices[1],
+                    &vertex_indices[2], &normal_indices[2]
+                ) != 3
+            )
             {
-                if (push_index(vertex1 - 1, &object->index_count, &object->indices, &index_capacity) == 0)
-                {
-                    log_error("Failed to push vertex 1 of index %d in line %d", object->vertex_count, line_number);
-                    object_destroy(object);
-                    return NULL;
-                }
+                log_error("Failed to parse face (f) at line %d", line_number);
+                object_destroy(object);
+                return NULL;
+            }
 
-                if (push_index(vertex2 - 1, &object->index_count, &object->indices, &index_capacity) == 0)
-                {
-                    log_error("Failed to push vertex 2 of index %d in line %d", object->vertex_count, line_number);
-                    object_destroy(object);
-                    return NULL;
-                }
+            const unsigned int indices[9] =
+            {
+                --vertex_indices[0], --texture_coordinate_indices[0], --normal_indices[0],
+                --vertex_indices[1], --texture_coordinate_indices[1], --normal_indices[1],
+                --vertex_indices[2], --texture_coordinate_indices[2], --normal_indices[2]
+            };
 
-                if (push_index(vertex3 - 1, &object->index_count, &object->indices, &index_capacity) == 0)
+            if
+            (
+                array_push
+                (
+                    indices, 9, sizeof(unsigned int), &object->index_count, &object->index_capacity,
+                    (void ***)object->indices
+                ) == 0
+            )
+            {
+                log_error("Failed to push indices of face at line %d", line_number);
+                object_destroy(object);
+                return NULL;
+            }
+        }
+        else if (strncmp(line, "vn ", 3) == 0)
+        {
+            float normal[3] = {0.0f, 0.0f, 0.0f};
+            if (sscanf(line, "vn %f %f %f", &normal[0], &normal[1], &normal[2]) == 3)
+            {
+                if
+                (
+                    array_push
+                    (
+                        normal, 3, sizeof(float), &object->normal_count, &object->normal_capacity,
+                        (void ***)object->normals
+                    ) == 0
+                )
                 {
-                    log_error("Failed to push vertex 3 of index %d in line %d", object->vertex_count, line_number);
+                    log_error("Failed to push normal at line %d", line_number);
                     object_destroy(object);
                     return NULL;
                 }
             }
             else
             {
-                log_error("Failed to parse 'f' line %d", line_number);
+                log_error("Failed to parse normal (vn) at line %d", line_number);
                 object_destroy(object);
                 return NULL;
             }
+        }
+        else if (strncmp(line, "vt ", 3) == 0)
+        {
+            float texture_coordinates[3] = {0.0f, 0.0f, 1.0f};
+            const int parsed_values = sscanf
+            (
+                line, "vt %f %f %f", &texture_coordinates[0], &texture_coordinates[1], &texture_coordinates[2]
+            );
+
+            if (parsed_values == 2 || parsed_values == 3)
+            {
+                if
+                (
+                    array_push
+                    (
+                        texture_coordinates, 3, sizeof(float), &object->texture_coordinate_count,
+                        &object->texture_coordinate_capacity, (void ***)object->texture_coordinates
+                    ) == 0
+                )
+                {
+                    log_error("Failed to push normal at line %d", line_number);
+                    object_destroy(object);
+                    return NULL;
+                }
+            }
+            else
+            {
+                log_error("Failed to parse texture coordinates (vt) at line %d", line_number);
+                object_destroy(object);
+                return NULL;
+            }
+        }
+        else if (strncmp(line, "g ", 2) == 0)
+        {
+            char group_name[128];
+            if (sscanf(line, "g %s", group_name) == 1)
+            {
+                // Do something with group name
+            }
+            else
+            {
+                log_error("Failed to parse group (g) at line %d", line_number);
+                object_destroy(object);
+                return NULL;
+            }
+        }
+        else if (strncmp(line, "o ", 2) == 0)
+        {
+            char object_name[128];
+            if (sscanf(line, "o %s", object_name) == 1)
+            {
+                // Do something with object name
+            }
+            else
+            {
+                log_error("Failed to parse object (o) at line %d", line_number);
+                object_destroy(object);
+                return NULL;
+            }
+        }
+        else if (strncmp(line, "mtllib ", 7) == 0)
+        {
+            char material_file[128];
+            if (sscanf(line, "mtllib %s", material_file) == 1)
+            {
+                // Do something with material file
+            }
+            else
+            {
+                log_error("Failed to parse material file (mtllib) at line %d", line_number);
+                object_destroy(object);
+                return NULL;
+            }
+        }
+        else if (strncmp(line, "usemtl ", 7) == 0)
+        {
+            char material_name[128];
+            if (sscanf(line, "usemtl %s", material_name) == 1)
+            {
+                // Do something with material name
+            }
+            else
+            {
+                log_error("Failed to parse material (usemtl) at line %d", line_number);
+                object_destroy(object);
+                return NULL;
+            }
+        }
+        else if (strncmp(line, "# ", 2) == 0)
+        {
+            continue;
         }
         else
         {
@@ -376,55 +538,6 @@ struct Object *object_create(const char *const path)
     return object;
 }
 
-static uint8_t push_vertex
-(
-    const float x, const float y, const float z, unsigned int *const vertex_count, float **const vertices,
-    uint32_t *const vertex_capacity
-)
-{
-    if (*vertex_count >= *vertex_capacity)
-    {
-        *vertex_capacity = *vertex_capacity == 0 ? 10 : *vertex_capacity * 2;
-        float *reallocated_vertices = realloc(*vertices, *vertex_capacity * 3 * sizeof(float));
-        if (reallocated_vertices == NULL)
-        {
-            log_error("Failed to reallocate memory for resizing vertices");
-            return 0;
-        }
-
-        *vertices = reallocated_vertices;
-    }
-
-    const uint32_t vertex_index = *vertex_count * 3;
-    (*vertices)[vertex_index + 0] = x;
-    (*vertices)[vertex_index + 1] = y;
-    (*vertices)[vertex_index + 2] = z;
-    (*vertex_count)++;
-    return 1;
-}
-
-static uint8_t push_index
-(
-    const unsigned int index, unsigned int *const index_count, unsigned int **const indices, uint32_t *const index_capacity
-)
-{
-    if (*index_count >= *index_capacity)
-    {
-        *index_capacity = *index_capacity == 0 ? 10 : *index_capacity * 2;
-        unsigned int *reallocated_indices = realloc(*indices, *index_capacity * sizeof(unsigned int));
-        if (reallocated_indices == NULL)
-        {
-            log_error("Failed to allocate memory for resizing indices");
-            return 0;
-        }
-
-        *indices = reallocated_indices;
-    }
-
-    (*indices)[(*index_count)++] = index;
-    return 1;
-}
-
 void object_destroy(struct Object *const object)
 {
     if (object == NULL)
@@ -432,6 +545,14 @@ void object_destroy(struct Object *const object)
         return;
     }
 
+    const size_t material_file_count = object->material_file_count;
+    for (size_t material_file_index = 0; material_file_index < material_file_count; ++material_file_index)
+    {
+        free(object->material_files[material_file_index]);
+    }
+
+    free(object->material_files);
+    free(object->normals);
     free(object->vertices);
     free(object->indices);
     free(object);

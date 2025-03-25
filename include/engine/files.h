@@ -73,10 +73,83 @@ void shader_destroy(struct Shader *const shader);
  */
 struct Object
 {
+    /**
+     * The coordinates of the vertices of the model as a flat array of floats where each three consecutive floats
+     * represent one vertex (`{x, y, z, x, y, z, x, y, z, ...}`).
+     */
     float *vertices;
-    unsigned int vertex_count;
-    unsigned int *indices;
-    unsigned int index_count;
+
+    /**
+     * The number of coordinates/elements in `float *Object::vertices`.
+     */
+    unsigned long vertex_count;
+
+    /**
+     * The maximum number of coordinates/elements `float *Object::vertices` can hold.
+     */
+    unsigned long vertex_capacity;
+
+    /**
+     * The indices of the model, representing the faces of the model. Stored in a flat array of unsigned integers.
+     */
+    unsigned long *indices;
+
+    /**
+     * The number of individual indices in `unsigned int *Object::indices`.
+     */
+    unsigned long index_count;
+
+    /**
+     * The maximum number of indices `unsigned int *Object::indices` can hold.
+     */
+    unsigned long index_capacity;
+
+    /**
+     * The coordinates of the normals of the model as a flat array of floats where each three consecutive floats
+     * represent one normal (`{x, y, z, x, y, z, x, y, z, ...}`).
+     */
+    float *normals;
+
+    /**
+     * The number of coordinates/elements in `float *Object::normals`.
+     */
+    unsigned long normal_count;
+
+    /**
+     * The maximum number of coordinates/elements `float *Object::normals` can hold.
+     */
+    unsigned long normal_capacity;
+
+    /**
+     * The coordinates of the texture of the model as a flat array of floats where each three consecutive floats
+     * represent one vertex (`{u, v, w, u, v, w, u, v, w, ...}`).
+     */
+    float *texture_coordinates;
+
+    /**
+     * The number of coordinates/elements in `float *Object::texture_coordinates`.
+     */
+    unsigned long texture_coordinate_count;
+
+    /**
+     * The maximum number of coordinates/elements `float *Object::texture_coordinates` can hold.
+     */
+    unsigned long texture_coordinate_capacity;
+
+    /**
+     * The names of the material files (`.mtl`) used by the model.
+     */
+    char **const material_files;
+
+    /**
+     * The number of material files used by the model.
+     */
+    unsigned long material_file_count;
+
+    /**
+     * The total number of material file names `char **const Object::material_files` can hold.
+     */
+    unsigned long material_file_capacity;
 };
 
 /**
