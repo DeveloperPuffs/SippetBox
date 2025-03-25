@@ -32,7 +32,7 @@ struct Context
 
 struct Window
 {
-    struct Context *context;
+    const struct Context *context;
     SDL_Window *sdl_window_handle;
     VkExtent2D window_extent;
     VkSurfaceKHR surface;
@@ -108,7 +108,7 @@ struct Context *context_create()
 {
     VkResult result;
 
-    struct Context *context = calloc(1, sizeof(struct Context));
+    struct Context *const context = calloc(1, sizeof(struct Context));
     if (context == NULL)
     {
         log_error("Failed to allocate memory for context instance");
@@ -133,13 +133,13 @@ struct Context *context_create()
     instance_creation_information.pApplicationInfo = &application_information;
 
 #ifdef NDEBUG
-    const char *instance_layers[] = {};
+    const char *const instance_layers[] = {};
 #else
     /*
         "VK_LAYER_KHRONOS_validation"
         For reporting error messages about potential API misuse and, performance issues, or invalid synchronization
     */
-    const char *instance_layers[] =
+    const char *const instance_layers[] =
     {
         "VK_LAYER_KHRONOS_validation"
     };
@@ -150,7 +150,7 @@ struct Context *context_create()
     instance_creation_information.ppEnabledLayerNames = instance_layers;
 
     uint32_t sdl_instance_extension_count = 0;
-    const char *const *sdl_instance_extensions = SDL_Vulkan_GetInstanceExtensions(&sdl_instance_extension_count);
+    const char *const *const sdl_instance_extensions = SDL_Vulkan_GetInstanceExtensions(&sdl_instance_extension_count);
     if (sdl_instance_extensions == NULL)
     {
         log_error("Failed to query SDL Vulkan instance extensions: %s", SDL_GetError());
@@ -166,7 +166,7 @@ struct Context *context_create()
         VK_EXT_DEBUG_UTILS_EXTENSION_NAME
         For setting up a debug messenger associated with the Vulkan instance
     */
-    const char *additional_instance_extensions[] =
+    const char *const additional_instance_extensions[] =
     {
         VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME,
         VK_EXT_DEBUG_UTILS_EXTENSION_NAME
@@ -176,7 +176,7 @@ struct Context *context_create()
         VK_EXT_DEBUG_UTILS_EXTENSION_NAME
         For setting up a debug messenger associated with the Vulkan instance
     */
-    const char *additional_instance_extensions[] =
+    const char *const additional_instance_extensions[] =
     {
         VK_EXT_DEBUG_UTILS_EXTENSION_NAME
     };
@@ -188,7 +188,7 @@ struct Context *context_create()
     );
 
     const size_t instance_extension_count = sdl_instance_extension_count + additional_instance_extension_count;
-    const char **instance_extensions = malloc(instance_extension_count * sizeof(const char *));
+    const char **const instance_extensions = malloc(instance_extension_count * sizeof(const char *));
     if (instance_extensions == NULL)
     {
         log_error("Failed to allocate memory for extensions");
@@ -451,13 +451,13 @@ struct Context *context_create()
     device_creation_information.queueCreateInfoCount = queue_creation_information_count;
 
 #ifdef NDEBUG
-    const char *logical_device_layers[] = {};
+    const char *const logical_device_layers[] = {};
 #else
     /*
         "VK_LAYER_KHRONOS_validation"
         For reporting error messages about potential API misuse and, performance issues, or invalid synchronization
     */
-    const char *logical_device_layers[] =
+    const char *const logical_device_layers[] =
     {
         "VK_LAYER_KHRONOS_validation"
     };
@@ -479,7 +479,7 @@ struct Context *context_create()
         "VK_KHR_portability_subset"
         For running Vulkan on a macOS environment via MoltenVK
     */
-    const char *logical_device_extensions[] =
+    const char *const logical_device_extensions[] =
     {
         VK_KHR_SWAPCHAIN_EXTENSION_NAME,
         "VK_KHR_portability_subset"
@@ -489,7 +489,7 @@ struct Context *context_create()
         VK_KHR_SWAPCHAIN_EXTENSION_NAME
         or presenting on a window surface
     */
-    const char *logical_device_extensions[] =
+    const char *const logical_device_extensions[] =
     {
         VK_KHR_SWAPCHAIN_EXTENSION_NAME
     };
@@ -533,7 +533,7 @@ struct Context *context_create()
 // Context Destruction Function
 /*********************************************************************************************************************/
 
-void context_destroy(struct Context *context)
+void context_destroy(struct Context *const context)
 {
     if (context == NULL)
     {
@@ -563,9 +563,7 @@ void context_destroy(struct Context *context)
     }
 
     vkDestroyInstance(vulkan_instance, NULL);
-
     free(context);
-    context = NULL;
 }
 
 /*********************************************************************************************************************/
@@ -794,7 +792,7 @@ static uint32_t rate_physical_device_extensions(const VkPhysicalDevice physical_
     
     for (uint32_t extension_index = 0; extension_index < extension_count; ++extension_index)
     {
-        const char *extension_name = extensions[extension_index].extensionName;
+        const char *const extension_name = extensions[extension_index].extensionName;
         if (strcmp(extension_name, VK_KHR_SWAPCHAIN_EXTENSION_NAME) == 0)
         {
             score += 1000;
@@ -836,7 +834,7 @@ static inline uint8_t buffer_copy
 
 static inline uint8_t image_load
 (
-    const struct Window *const window, const char *file_path, VkImage *texture_image,
+    const struct Window *const window, const char *const file_path, VkImage *texture_image,
     VkDeviceMemory *texture_image_memory
 );
 
@@ -846,7 +844,8 @@ static inline uint8_t image_load
 
 struct Window *window_create
 (
-    const char *title, const unsigned int initial_width, const unsigned int initial_height, struct Context *context
+    const char *const title, const unsigned int initial_width, const unsigned int initial_height,
+    const struct Context *context
 )
 {
     VkResult result;
@@ -857,7 +856,7 @@ struct Window *window_create
         return NULL;
     }
 
-    struct Window *window = calloc(1, sizeof(struct Window));
+    struct Window *const window = calloc(1, sizeof(struct Window));
     if (window == NULL)
     {
         log_error("Failed to allocate memory for window instance");
@@ -1214,7 +1213,7 @@ struct Window *window_create
     // Shader Modules Creation
     /*****************************************************************************************************************/
 
-    const char *shader_file_paths[] =
+    const char *const shader_file_paths[] =
     {
         "resources/shaders/shader.vert.spv",
         "resources/shaders/shader.frag.spv"
@@ -1224,8 +1223,8 @@ struct Window *window_create
     window->shader_modules = calloc(window->shader_module_count, sizeof(VkShaderModule));
     for (size_t shader_module_index = 0; shader_module_index < window->shader_module_count; ++shader_module_index)
     {
-        const char *shader_file_path = shader_file_paths[shader_module_index];
-        struct Shader *shader = shader_create(shader_file_path);
+        const char *const shader_file_path = shader_file_paths[shader_module_index];
+        struct Shader *const shader = shader_create(shader_file_path);
         if (shader == NULL)
         {
             log_error("Failed to create shader: %s", shader_file_path);
@@ -2175,7 +2174,7 @@ unsigned char window_update(struct Window *const window)
     return 1;
 }
 
-static inline uint8_t window_begin_frame(struct Window *window)
+static inline uint8_t window_begin_frame(struct Window *const window)
 {
     VkResult result;
 
@@ -2365,7 +2364,7 @@ void window_render_something(struct Window *const window)
 // Window Destruction Function
 /*********************************************************************************************************************/
 
-void window_destroy(struct Window *window)
+void window_destroy(struct Window *const window)
 {
     VkResult result;
 
@@ -2456,9 +2455,7 @@ void window_destroy(struct Window *window)
     vkDestroySwapchainKHR(logical_device, window->swapchain, NULL);
     SDL_Vulkan_DestroySurface(vulkan_instance, window->surface, NULL);
     SDL_DestroyWindow(window->sdl_window_handle);
-
     free(window);
-    window = NULL;
 }
 
 /*********************************************************************************************************************/
@@ -2691,13 +2688,13 @@ static inline uint8_t buffer_copy_to_image
 
 static inline uint8_t image_load
 (
-    const struct Window *const window, const char *file_path, VkImage *texture_image,
+    const struct Window *const window, const char *const file_path, VkImage *texture_image,
     VkDeviceMemory *texture_image_memory
 )
 {
     VkResult result;
 
-    struct Image *image = image_create(file_path);
+    struct Image *const image = image_create(file_path);
     if (image == NULL)
     {
         log_error("Failed to create image");

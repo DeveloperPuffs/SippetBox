@@ -8,7 +8,7 @@
 
 #include <engine/files.h>
 
-static inline void file_close(const char *type, FILE *file)
+static inline void file_close(const char *const type, FILE *file)
 {
     const int result = fclose(file);
     if (result != 0)
@@ -21,7 +21,7 @@ static inline void file_close(const char *type, FILE *file)
 // Image Handling Functions
 /*********************************************************************************************************************/
 
-static unsigned char image_create_png(FILE *file, struct Image *image);
+static unsigned char image_create_png(FILE *file, struct Image *const image);
 
 struct Image *image_create(const char *const path)
 {
@@ -87,7 +87,7 @@ struct Image *image_create(const char *const path)
     return image;
 }
 
-static unsigned char image_create_png(FILE *file, struct Image *image)
+static unsigned char image_create_png(FILE *file, struct Image *const image)
 {
     png_structp reader = png_create_read_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
     if (reader == NULL)
@@ -171,7 +171,7 @@ static unsigned char image_create_png(FILE *file, struct Image *image)
     return 1;
 }
 
-void image_destroy(struct Image *image)
+void image_destroy(struct Image *const image)
 {
     if (image == NULL)
     {
@@ -184,9 +184,7 @@ void image_destroy(struct Image *image)
     }
 
     free(image->data);
-
     free(image);
-    image = NULL;
 }
 
 /*********************************************************************************************************************/
@@ -265,7 +263,7 @@ struct Shader *shader_create(const char *const path)
     return shader;
 }
 
-void shader_destroy(struct Shader *shader)
+void shader_destroy(struct Shader *const shader)
 {
     if (shader == NULL)
     {
@@ -273,7 +271,168 @@ void shader_destroy(struct Shader *shader)
     }
 
     free(shader->data);
-
     free(shader);
-    shader = NULL;
+}
+
+/*********************************************************************************************************************/
+// Object Handling Functions
+/*********************************************************************************************************************/
+
+static uint8_t push_vertex
+(
+    const float x, const float y, const float z, unsigned int *const vertex_count, float **const vertices,
+    uint32_t *const vertex_capacity
+);
+
+static uint8_t push_index
+(
+    const unsigned int index, unsigned int *const index_count, unsigned int **const indices, uint32_t *const index_capacity
+);
+
+struct Object *object_create(const char *const path)
+{
+    FILE *file = fopen(path, "rb");
+    if (file == NULL)
+    {
+        log_error("Failed to open object: %s", path);
+        return NULL;
+    }
+
+    struct Object *object = calloc(1, sizeof(struct Object));
+    if (object == NULL)
+    {
+        log_error("Failed to allocate memory for object instance");
+        file_close("object", file);
+        return NULL;
+    }
+
+    uint32_t vertex_capacity = 0;
+    uint32_t index_capacity = 0;
+
+    // Please don't use a `.obj` model with over 256 characters per line :(
+    char line[256];
+
+    uint32_t line_number = 0;
+    while (fgets(line, sizeof(line), file))
+    {
+        line_number++;
+
+        if (strncmp(line, "v ", 2) == 0)
+        {
+            float x, y, z;
+            if (sscanf(line, "v %f %f %f", &x, &y, &z) == 3)
+            {
+                push_vertex(x, y, z, &object->vertex_count, &object->vertices, &vertex_capacity);
+            }
+            else
+            {
+                log_error("Failed to parse 'v' line %d", line_number);
+                object_destroy(object);
+                return NULL;
+            }
+        }
+        else if (strncmp(line, "f ", 2) == 0)
+        {
+            unsigned int vertex1, vertex2, vertex3;
+            if (sscanf(line, "f %u %u %u", &vertex1, &vertex2, &vertex3) == 3)
+            {
+                if (push_index(vertex1 - 1, &object->index_count, &object->indices, &index_capacity) == 0)
+                {
+                    log_error("Failed to push vertex 1 of index %d in line %d", object->vertex_count, line_number);
+                    object_destroy(object);
+                    return NULL;
+                }
+
+                if (push_index(vertex2 - 1, &object->index_count, &object->indices, &index_capacity) == 0)
+                {
+                    log_error("Failed to push vertex 2 of index %d in line %d", object->vertex_count, line_number);
+                    object_destroy(object);
+                    return NULL;
+                }
+
+                if (push_index(vertex3 - 1, &object->index_count, &object->indices, &index_capacity) == 0)
+                {
+                    log_error("Failed to push vertex 3 of index %d in line %d", object->vertex_count, line_number);
+                    object_destroy(object);
+                    return NULL;
+                }
+            }
+            else
+            {
+                log_error("Failed to parse 'f' line %d", line_number);
+                object_destroy(object);
+                return NULL;
+            }
+        }
+        else
+        {
+            log_error("Failed to parse line %d", line_number);
+            object_destroy(object);
+            return NULL;
+        }
+    }
+
+    file_close("object", file);
+    return object;
+}
+
+static uint8_t push_vertex
+(
+    const float x, const float y, const float z, unsigned int *const vertex_count, float **const vertices,
+    uint32_t *const vertex_capacity
+)
+{
+    if (*vertex_count >= *vertex_capacity)
+    {
+        *vertex_capacity = *vertex_capacity == 0 ? 10 : *vertex_capacity * 2;
+        float *reallocated_vertices = realloc(*vertices, *vertex_capacity * 3 * sizeof(float));
+        if (reallocated_vertices == NULL)
+        {
+            log_error("Failed to reallocate memory for resizing vertices");
+            return 0;
+        }
+
+        *vertices = reallocated_vertices;
+    }
+
+    const uint32_t vertex_index = *vertex_count * 3;
+    (*vertices)[vertex_index + 0] = x;
+    (*vertices)[vertex_index + 1] = y;
+    (*vertices)[vertex_index + 2] = z;
+    (*vertex_count)++;
+    return 1;
+}
+
+static uint8_t push_index
+(
+    const unsigned int index, unsigned int *const index_count, unsigned int **const indices, uint32_t *const index_capacity
+)
+{
+    if (*index_count >= *index_capacity)
+    {
+        *index_capacity = *index_capacity == 0 ? 10 : *index_capacity * 2;
+        unsigned int *reallocated_indices = realloc(*indices, *index_capacity * sizeof(unsigned int));
+        if (reallocated_indices == NULL)
+        {
+            log_error("Failed to allocate memory for resizing indices");
+            return 0;
+        }
+
+        *indices = reallocated_indices;
+    }
+
+    (*indices)[(*index_count)++] = index;
+    return 1;
+}
+
+void object_destroy(struct Object *const object)
+{
+    if (object == NULL)
+    {
+        return;
+    }
+
+    free(object->vertices);
+    free(object->indices);
+    free(object);
 }

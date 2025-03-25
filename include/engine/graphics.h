@@ -13,7 +13,7 @@ struct Context *context_create();
 /**
  * Destroys an instance of `Context` by freeing its resources.
  */
-void context_destroy(struct Context *graphics_backend);
+void context_destroy(struct Context *const context);
 
 /**
  * Stores resources used by a window for creating an environment that can be renderered on.
@@ -26,7 +26,8 @@ struct Window;
  */
 struct Window *window_create
 (
-    const char *title, const unsigned int initial_width, const unsigned int initial_height, struct Context *context
+    const char *const title, const unsigned int initial_width, const unsigned int initial_height,
+    const struct Context *context
 );
 
 /**
@@ -43,4 +44,4 @@ void window_render_something(struct Window *const window);
 /**
  * Destroys an instance of `Window` by freeing its resources. Closes the SDL window associated with the given instance.
  */
-void window_destroy(struct Window *window);
+void window_destroy(struct Window *const window);

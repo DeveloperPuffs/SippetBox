@@ -67,3 +67,24 @@ struct Shader *shader_create(const char *const path);
  * Destroys an instance of `Shader` by freeing its resources.
  */
 void shader_destroy(struct Shader *const shader);
+
+/**
+ * Stores data about an `.obj` 3D model.
+ */
+struct Object
+{
+    float *vertices;
+    unsigned int vertex_count;
+    unsigned int *indices;
+    unsigned int index_count;
+};
+
+/**
+ * Creates an instance of `Object` and initializes its resources.
+ */
+struct Object *object_create(const char *const path);
+
+/**
+ * Destroys an instance of `Object` by freeing its resources.
+ */
+void object_destroy(struct Object *const object);
