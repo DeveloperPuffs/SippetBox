@@ -8,12 +8,12 @@ struct Context;
 /**
  * Creates an instance of `Context` and initializes its resources.
  */
-struct Context *context_create();
+struct Context *createContext();
 
 /**
  * Destroys an instance of `Context` by freeing its resources.
  */
-void context_destroy(struct Context *const context);
+void destroyContext(struct Context *const context);
 
 /**
  * Stores resources used by a window for creating an environment that can be renderered on.
@@ -21,27 +21,26 @@ void context_destroy(struct Context *const context);
 struct Window;
 
 /**
- * Creates an instance of `Window` and initializes its resources. Opens an SDL window with the title as a string and
- * the initial dimensions of the window as positive integers. Is associated with the given instance of `Context`.
+ * Creates an instance of `Window` and initializes its resources. Opens an SDL window with the
+ * title as a string and the initial dimensions of the window as positive integers. Is associated
+ * with the given instance of `Context`.
  */
-struct Window *window_create
-(
-    const char *const title, const unsigned int initial_width, const unsigned int initial_height,
-    const struct Context *context
-);
+struct Window *createWindow(const char *const title, const unsigned int width, const unsigned int height, const struct Context *context);
 
 /**
- * Renders a frame on a `Window` by submitting the recorded rendering commands for execution, and then for presenting
- * after the rendering operations have been executed on the GPU. Returns `1` for success and `0` for failure.
+ * Draws a frame on a `Window` by submitting the recorded rendering commands for execution, and
+ * then for presenting after the rendering operations have been executed on the GPU. Returns `1`
+ * for success and `0` for failure.
  */
-unsigned char window_update(struct Window *const window);
+unsigned char updateWindow(struct Window *const window);
 
 /**
- * Renders something onto the window :)
+ * Draws something onto the window :)
  */
-void window_render_something(struct Window *const window);
+void drawSomething(struct Window *const window);
 
 /**
- * Destroys an instance of `Window` by freeing its resources. Closes the SDL window associated with the given instance.
+ * Destroys an instance of `Window` by freeing its resources. Closes the SDL window associated with
+ * the given instance.
  */
-void window_destroy(struct Window *const window);
+void destroyWindow(struct Window *const window);

@@ -19,7 +19,7 @@ target_link_libraries(SippetBox PRIVATE Vulkan::Vulkan)
 
 find_program(GLSLANG_VALIDATOR glslangValidator)
 if (NOT GLSLANG_VALIDATOR)
-    message(FATAL_ERROR "glslangValidator not found, please install Vulkan SDK or provide a path to glslangValidator")
+  message(FATAL_ERROR "glslangValidator not found, please install Vulkan SDK or provide a path to glslangValidator")
 endif()
 
 set(SHADER_DIRECTORY "${CMAKE_SOURCE_DIR}/resources/shaders" CACHE STRING "Shader Directory")

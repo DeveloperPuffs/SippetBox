@@ -1,86 +1,51 @@
-#include <stdlib.h>
-
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
-
 #include <engine/logging.h>
 #include <engine/graphics.h>
 
-struct State
-{
-    struct Context *context;
-    struct Window *window;
+struct State {
+  struct Context *context;
+  struct Window *window;
 };
 
-static int update(struct State *const state);
-static void terminate(struct State *const state, const int exit_code);
+static int terminate(struct State *const state, const int exitCode);
 
-int main()
-{
-    struct State state = {};
-    state.context = NULL;
-    state.window = NULL;
+int main() {
+  struct State state = {};
+  state.context = NULL;
+  state.window = NULL;
 
-    if (SDL_Init(SDL_INIT_VIDEO) == false)
-    {
-        log_error("Failed to initialize SDL: %s", SDL_GetError());
-        terminate(&state, EXIT_FAILURE);
-    }
+  if (!SDL_Init(SDL_INIT_VIDEO))
+    return (logError("Failed to initialize SDL: %s", SDL_GetError()), terminate(&state, 1));
 
-    if (SDL_Vulkan_LoadLibrary(NULL) == false)
-    {
-        log_error("Failed to load Vulkan Library with SDL: %s", SDL_GetError());
-        terminate(&state, EXIT_FAILURE);
-    }
+  if (!SDL_Vulkan_LoadLibrary(NULL))
+    return (logError("Failed to load Vulkan library: %s", SDL_GetError()), terminate(&state, 1));
 
-    state.context = context_create();
-    if (state.context == NULL)
-    {
-        log_error("Failed to create context instance");
-        terminate(&state, EXIT_FAILURE);
-    }
+  if (!(state.context = createContext()))
+    return (logError("Failed to create context"), terminate(&state, 1));
 
-    state.window = window_create("SippetBox", 640, 480, state.context);
-    if (state.window == NULL)
-    {
-        log_error("Failed to create window instance");
-        terminate(&state, EXIT_FAILURE);
-    }
+  if (!(state.window = createWindow("SippetBox", 640, 480, state.context)))
+    return (logError("Failed to create window"), terminate(&state, 1));
 
-    // This will keep waiting for the `update()` function to return `false`
-    while (update(&state) == 1);
-
-    terminate(&state, EXIT_SUCCESS);
-}
-
-static int update(struct State *const state)
-{
+  while (1) {
     SDL_Event event;
-    while (SDL_PollEvent(&event) == true)
-    {
-        if (event.type == SDL_EVENT_QUIT)
-        {
-            return 0;
-        }
+    while (SDL_PollEvent(&event)) {
+      if (event.type == SDL_EVENT_QUIT) return terminate(&state, 0);
     }
 
-    window_render_something(state->window);
+    drawSomething(state.window);
 
-    if (window_update(state->window) == 0)
-    {
-        log_error("Failed to update window");
-        return 0;
-    }
+    if (!updateWindow(state.window))
+      return (logError("Failed to update window"), terminate(&state, 1));
+  }
 
-    return 1;
+  return terminate(&state, 0);
 }
 
-static void terminate(struct State *const state, const int exit_code)
-{
-    window_destroy(state->window);
-    context_destroy(state->context);
-    SDL_Vulkan_UnloadLibrary();
-    SDL_Quit();
-
-    exit(exit_code);
+static int terminate(struct State *const state, const int exitCode) {
+  destroyWindow(state->window);
+  destroyContext(state->context);
+  SDL_Vulkan_UnloadLibrary();
+  SDL_Quit();
+  return exitCode;
 }
