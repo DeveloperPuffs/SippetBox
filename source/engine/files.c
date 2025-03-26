@@ -5,12 +5,12 @@
 #include <engine/logging.h>
 #include <engine/files.h>
 
-static inline void fileClose(const char *const type, FILE *file) {
+static inline void closeFile(const char *const type, FILE *file) {
   const int result = fclose(file);
   if (result) logWarning("Failed to close %s file, error code: %d", type, result);
 }
 
-static unsigned char createImagePng(FILE *file, struct Image *const image);
+static unsigned char createImagePNG(FILE *file, struct Image *const image);
 
 struct Image *createImage(const char *const path) {
   const char *dotPosition = strrchr(path, '.');
@@ -26,18 +26,18 @@ struct Image *createImage(const char *const path) {
   if (!file) return (logError("Failed to open image: %s", path), free(extension), NULL);
 
   struct Image *const image = calloc(1, sizeof(struct Image));
-  if (!image) return (fileClose("image", file), free(extension), NULL);
+  if (!image) return (closeFile("image", file), free(extension), NULL);
 
-  unsigned char imageCreationResult;
-  if (!strcmp(extension, ".png")) imageCreationResult = createImagePng(file, image);
-  else return (logError("Unsupported image extension '%s'", extension), fileClose("image", file), destroyImage(image), free(extension), NULL);
+  unsigned char createdImage;
+  if (!strcmp(extension, ".png")) createdImage = createImagePNG(file, image);
+  else return (logError("Unsupported image extension '%s'", extension), closeFile("image", file), destroyImage(image), free(extension), NULL);
 
   free(extension);
-  fileClose("image", file);
-  return imageCreationResult ? image : (logError("Failed to create image with: %s", path), destroyImage(image), NULL);
+  closeFile("image", file);
+  return createdImage ? image : (logError("Failed to create image with: %s", path), destroyImage(image), NULL);
 }
 
-static unsigned char createImagePng(FILE *file, struct Image *const image) {
+static unsigned char createImagePNG(FILE *file, struct Image *const image) {
   png_structp reader = png_create_read_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
   if (!reader) return (logError("Failed to create PNG reader struct"), 0);
 
@@ -84,20 +84,20 @@ struct Shader *createShader(const char *const path) {
   if (!file) return (logError("Failed to open shader: %s", path), NULL);
 
   struct Shader *const shader = calloc(1, sizeof(struct Shader));
-  if (!shader) return (fileClose("shader", file), NULL);
+  if (!shader) return (closeFile("shader", file), NULL);
 
-  if (fseek(file, 0, SEEK_END)) return (logError("Failed to seek to end of shader: %s", path), fileClose("shader", file), destroyShader(shader), NULL);
+  if (fseek(file, 0, SEEK_END)) return (logError("Failed to seek to end of shader: %s", path), closeFile("shader", file), destroyShader(shader), NULL);
 
   const long size = ftell(file);
-  if (size == -1L) return (logError("Failed to determine shader size: %s", path), fileClose("shader", file), destroyShader(shader), NULL);
-  if (size % 4) return (logError("Shader size is not aligned: %s", path), fileClose("shader", file), destroyShader(shader), NULL);
-  if (fseek(file, 0, SEEK_SET)) return (logError("Failed to rewind shader: %s", path), fileClose("shader", file), destroyShader(shader), NULL);
-  if (!(shader->data = malloc(shader->size = (unsigned long)size))) return (fileClose("shader", file), destroyShader(shader), NULL);
+  if (size == -1L) return (logError("Failed to determine shader size: %s", path), closeFile("shader", file), destroyShader(shader), NULL);
+  if (size % 4) return (logError("Shader size is not aligned: %s", path), closeFile("shader", file), destroyShader(shader), NULL);
+  if (fseek(file, 0, SEEK_SET)) return (logError("Failed to rewind shader: %s", path), closeFile("shader", file), destroyShader(shader), NULL);
+  if (!(shader->data = malloc(shader->size = (unsigned long)size))) return (closeFile("shader", file), destroyShader(shader), NULL);
 
   if (fread(shader->data, 1, size, file) != size)
-    return (logError("Failed to read shader: %s", path), fileClose("shader", file), destroyShader(shader), NULL);
+    return (logError("Failed to read shader: %s", path), closeFile("shader", file), destroyShader(shader), NULL);
 
-  fileClose("shader", file);
+  closeFile("shader", file);
   return shader;
 }
 
@@ -125,7 +125,7 @@ struct Object *createObject(const char *const path) {
   if (!file) return (logError("Failed to open object: %s", path), NULL);
 
   struct Object *const object = calloc(1, sizeof(struct Object));
-  if (!object) return (fileClose("object", file), NULL);
+  if (!object) return (closeFile("object", file), NULL);
 
   // Please don't use a `.obj` model with over 256 characters per line :(
   char line[256];
@@ -196,7 +196,7 @@ struct Object *createObject(const char *const path) {
     else return (logError("Failed to parse line %d", lineNumber), destroyObject(object), NULL);
   }
 
-  fileClose("object", file);
+  closeFile("object", file);
   return object;
 }
 
