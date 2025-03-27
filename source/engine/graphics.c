@@ -12,6 +12,9 @@
 #include <engine/logging.h>
 #include <engine/graphics.h>
 
+#define VERTEX_SIZE (13 * sizeof(float))
+#define INDEX_SIZE (sizeof(unsigned int))
+
 struct Context {
   VkInstance vulkanInstance;
   VkDebugUtilsMessengerEXT debugMessenger;
@@ -704,13 +707,13 @@ struct Window *createWindow(const char *const title, const unsigned int width, c
 
   VkVertexInputBindingDescription vertexInputBindingDescription = {};
   vertexInputBindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-  vertexInputBindingDescription.stride = 8 * sizeof(float);
+  vertexInputBindingDescription.stride = VERTEX_SIZE;
   vertexInputBindingDescription.binding = 0;
 
   vertexInputStateCreationInformation.pVertexBindingDescriptions = &vertexInputBindingDescription;
   vertexInputStateCreationInformation.vertexBindingDescriptionCount = 1;
 
-  VkVertexInputAttributeDescription vertexInputAttributeDescriptions[3] = {};
+  VkVertexInputAttributeDescription vertexInputAttributeDescriptions[4] = {};
 
   // Represents the position of the vertex
   vertexInputAttributeDescriptions[0].location = 0;
@@ -718,20 +721,26 @@ struct Window *createWindow(const char *const title, const unsigned int width, c
   vertexInputAttributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
   vertexInputAttributeDescriptions[0].offset = 0;
 
-  // Represents the color of the vertex
+  // Represents the normal of the vertex
   vertexInputAttributeDescriptions[1].location = 1;
   vertexInputAttributeDescriptions[1].binding = 0;
   vertexInputAttributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
   vertexInputAttributeDescriptions[1].offset = 3 * sizeof(float);
 
-  // Represents the position of the texture (how it is mapped onto the geometry)
+  // Represents the texture coordinates of the vertex
   vertexInputAttributeDescriptions[2].location = 2;
   vertexInputAttributeDescriptions[2].binding = 0;
-  vertexInputAttributeDescriptions[2].format = VK_FORMAT_R32G32_SFLOAT;
-  vertexInputAttributeDescriptions[2].offset = (3 + 3) * sizeof(float);
+  vertexInputAttributeDescriptions[2].format = VK_FORMAT_R32G32B32_SFLOAT;
+  vertexInputAttributeDescriptions[2].offset = 6 * sizeof(float);
+
+  // Represents the color of the vertex
+  vertexInputAttributeDescriptions[3].location = 3;
+  vertexInputAttributeDescriptions[3].binding = 0;
+  vertexInputAttributeDescriptions[3].format = VK_FORMAT_R32G32B32A32_SFLOAT;
+  vertexInputAttributeDescriptions[3].offset = 9 * sizeof(float);
 
   vertexInputStateCreationInformation.pVertexAttributeDescriptions = vertexInputAttributeDescriptions;
-  vertexInputStateCreationInformation.vertexAttributeDescriptionCount = 3;
+  vertexInputStateCreationInformation.vertexAttributeDescriptionCount = 4;
 
   VkPipelineInputAssemblyStateCreateInfo inputAssemblyStateCreationInformation = {};
   inputAssemblyStateCreationInformation.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
@@ -920,29 +929,30 @@ struct Window *createWindow(const char *const title, const unsigned int width, c
   if (result) return (logError("Failed to create texture sampler: %s", string_VkResult(result)), destroyWindow(window), NULL);
 
   window->vertexCount = 8;
-  if (!(window->vertices = malloc(8 * window->vertexCount * sizeof(float)))) return (destroyWindow(window), NULL);
-
-  const float vertices[] = {
-    -0.5f, -0.5f, 0.25f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f,
-    0.5f, -0.5f, 0.25f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f,
-    0.5f, 0.5f, 0.25f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f,
-    -0.5f, 0.5f, 0.25f, 1.0f, 1.0f, 1.0f, 0.0f, 1.0f,
-
-    -0.5f, -0.5f, -0.25f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f,
-    0.5f, -0.5f, -0.25f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f,
-    0.5f, 0.5f, -0.25f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f,
-    -0.5f, 0.5f, -0.25f, 1.0f, 1.0f, 1.0f, 0.0f, 1.0f
-  };
-
-  memcpy(window->vertices, &vertices, sizeof(vertices));
+  if (!(window->vertices = malloc(window->vertexCount * VERTEX_SIZE))) return (destroyWindow(window), NULL);
 
   window->indexCount = 12;
-  if (!(window->indices = malloc(window->indexCount * sizeof(unsigned short)))) return (destroyWindow(window), NULL);
+  if (!(window->indices = malloc(window->indexCount * INDEX_SIZE))) return (destroyWindow(window), NULL);
+
+  // x, y, z, i, j, k, u, v, w, r, g, b, a
+  const float vertices[] = {
+    -0.500f, -0.500f, +0.250f,    +0.000f, +0.000f, +0.000f,    +0.000f, +0.000f, +0.000f,    +1.000f, +0.000f, +0.000f, +1.000f,
+    +0.500f, -0.500f, +0.250f,    +0.000f, +0.000f, +0.000f,    +1.000f, +0.000f, +0.000f,    +0.000f, +1.000f, +0.000f, +1.000f,
+    +0.500f, +0.500f, +0.250f,    +0.000f, +0.000f, +0.000f,    +1.000f, +1.000f, +0.000f,    +0.000f, +0.000f, +1.000f, +1.000f,
+    -0.500f, +0.500f, +0.250f,    +0.000f, +0.000f, +0.000f,    +0.000f, +1.000f, +0.000f,    +1.000f, +1.000f, +1.000f, +1.000f,
+
+    -0.500f, -0.500f, -0.250f,    +0.000f, +0.000f, +0.000f,    +0.000f, +0.000f, +0.000f,    +1.000f, +0.000f, +0.000f, +1.000f,
+    +0.500f, -0.500f, -0.250f,    +0.000f, +0.000f, +0.000f,    +1.000f, +0.000f, +0.000f,    +0.000f, +1.000f, +0.000f, +1.000f,
+    +0.500f, +0.500f, -0.250f,    +0.000f, +0.000f, +0.000f,    +1.000f, +1.000f, +0.000f,    +0.000f, +0.000f, +1.000f, +1.000f,
+    -0.500f, +0.500f, -0.250f,    +0.000f, +0.000f, +0.000f,    +0.000f, +1.000f, +0.000f,    +1.000f, +1.000f, +1.000f, +1.000f,
+  };
 
   const uint16_t indices[] = {0, 1, 2, 2, 3, 0, 4, 5, 6, 6, 7, 4};
+
+  memcpy(window->vertices, &vertices, sizeof(vertices));
   memcpy(window->indices, &indices, sizeof(indices));
 
-  const VkDeviceSize vertexBufferSize = 8 * window->vertexCount * sizeof(float);
+  const VkDeviceSize vertexBufferSize = window->vertexCount * VERTEX_SIZE;
 
   VkBuffer vertexStagingBuffer;
   VkDeviceMemory vertexStagingBufferMemory;
@@ -985,7 +995,7 @@ struct Window *createWindow(const char *const title, const unsigned int width, c
   vkDestroyBuffer(logicalDevice, vertexStagingBuffer, NULL);
   vkFreeMemory(logicalDevice, vertexStagingBufferMemory, NULL);
 
-  const VkDeviceSize indexBufferSize = window->indexCount * sizeof(unsigned short);
+  const VkDeviceSize indexBufferSize = window->indexCount * INDEX_SIZE;
 
   VkBuffer indexStagingBuffer;
   VkDeviceMemory indexStagingBufferMemory;

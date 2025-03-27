@@ -7,18 +7,24 @@ layout(binding = 0) uniform UniformBufferObject {
 } uniformBufferObject;
 
 layout(location = 0) in vec3 inPosition;
-layout(location = 1) in vec3 inColor;
-layout(location = 2) in vec2 inTextureCoordinates;
-layout(location = 0) out vec3 fragmentColor;
-layout(location = 1) out vec2 fragmentTexureCoordinates;
+layout(location = 1) in vec3 inNormal;
+layout(location = 2) in vec3 inTextureCoordinates;
+layout(location = 3) in vec4 inColor;
+
+layout(location = 0) out vec3 fragmentNormal;
+layout(location = 1) out vec3 fragmentTexureCoordinates;
+layout(location = 2) out vec4 fragmentColor;
 
 void main() {
-  fragmentColor = inColor;
-  fragmentTexureCoordinates = inTextureCoordinates;
   gl_Position = (
     uniformBufferObject.projection *
     uniformBufferObject.view *
     uniformBufferObject.model *
     vec4(inPosition, 1.0)
   );
+
+  // Leave these values as they are
+  fragmentNormal = inNormal;
+  fragmentTexureCoordinates = inTextureCoordinates;
+  fragmentColor = inColor;
 }
