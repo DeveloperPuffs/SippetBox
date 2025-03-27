@@ -1297,11 +1297,7 @@ void drawSomething(struct Window *const window) {
 
   vkCmdBindIndexBuffer(commandBuffer, window->indexBuffer, 0, VK_INDEX_TYPE_UINT16);
 
-  vkCmdBindDescriptorSets
-  (
-    commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, window->pipelineLayout, 0, 1,
-    &window->descriptorSets[window->frameIndex], 0, NULL
-  );
+  vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, window->pipelineLayout, 0, 1, &window->descriptorSets[window->frameIndex], 0, NULL);
 
   vkCmdDrawIndexed(commandBuffer, window->indexCount, 1, 0, 0, 0);
 

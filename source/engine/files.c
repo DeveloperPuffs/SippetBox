@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <png.h>
+#include <engine/collections.h>
 #include <engine/logging.h>
 #include <engine/files.h>
 
@@ -107,17 +108,107 @@ void destroyShader(struct Shader *const shader) {
   free(shader);
 }
 
-static unsigned char arrayPush(const void *const pushElements, const unsigned long pushCount, const unsigned long elementSize, unsigned long *const arrayCount, unsigned long *const arrayCapacity, void ***const array) {
-  if (*arrayCount + pushCount > *arrayCapacity) {
-    *arrayCapacity = (*arrayCapacity == 0) ? pushCount : *arrayCapacity * 2;
-    void *reallocatedArray = realloc(*array, *arrayCapacity * elementSize);
-    if (!reallocatedArray) return 0;
-    *array = reallocatedArray;
+struct ObjectData {
+  struct List *positions;
+  struct List *normals;
+  struct List *textureCoordinates;
+  struct List *indices;
+};
+
+static void destroyObjectData(struct ObjectData *const objectData);
+
+static struct ObjectData *parseObjectData(FILE *const file) {
+  struct ObjectData *const objectData = calloc(1, sizeof(struct ObjectData));
+  if (!objectData) return NULL;
+
+  if (!(objectData->positions = createList(64, sizeof(float))))
+    return (logError("Failed to create positions list"), destroyObjectData(objectData), NULL);
+
+  if (!(objectData->normals = createList(64, sizeof(float))))
+    return (logError("Failed to create normals list"), destroyObjectData(objectData), NULL);
+
+  if (!(objectData->textureCoordinates = createList(64, sizeof(float))))
+    return (logError("Failed to create texture coordinates list"), destroyObjectData(objectData), NULL);
+
+  if (!(objectData->indices = createList(64, sizeof(unsigned long))))
+    return (logError("Failed to create indices list"), destroyObjectData(objectData), NULL);
+
+  char line[256];
+  size_t lineNumber = 0;
+  while (fgets(line, sizeof(line), file)) {
+    ++lineNumber;
+
+    if (!strncmp(line, "v ", 2)) {
+      float position[3] = {0.0f, 0.0f, 0.0f};
+      if (sscanf(line, "v %f %f %f", &position[0], &position[1], &position[2]) != 3)
+        return (logError("Failed to parse position (v) at line %d", lineNumber), destroyObjectData(objectData), NULL);
+
+      if (!pushList(position, 3, objectData->positions))
+        return (logError("Failed to push position at line %d", lineNumber), destroyObjectData(objectData), NULL);
+
+    } else if (!strncmp(line, "f ", 2)) {
+      // p - position, t - texture coordinates, n - normal
+      unsigned int p[3] = {1, 1, 1}, t[3] = {1, 1, 1}, n[3] = {1, 1, 1};
+      const int result1 = sscanf(line, "f %u %u %u", &p[0], &p[1], &p[2]);
+      const int result2 = sscanf(line, "f %u//%u %u//%u %u//%u", &p[0], &n[0], &p[1], &n[1], &p[2], &n[2]);
+      const int result3 = sscanf(line, "f %u/%u/%u %u/%u/%u %u/%u/%u", &p[0], &t[0], &n[0], &p[1], &t[1], &n[1], &p[2], &t[2], &n[2]);
+      if (result1 != 3 && result2 != 6 && result3 != 9)
+        return (logError("Failed to parse face (f) at line %d", lineNumber), destroyObjectData(objectData), NULL);
+
+      const unsigned int indices[9] = {--p[0], --t[0], --n[0], --p[1], --t[1], --n[1], --p[2], --t[2], --n[2]};
+      if (!pushList(indices, 9, objectData->indices))
+        return (logError("Failed to push indices of face at line %d", lineNumber), destroyObjectData(objectData), NULL);
+
+    } else if (!strncmp(line, "vn ", 3)) {
+      float normal[3] = {0.0f, 0.0f, 0.0f};
+      if (sscanf(line, "vn %f %f %f", &normal[0], &normal[1], &normal[2]) != 3)
+        return (logError("Failed to parse normal (vn) at line %d", lineNumber), destroyObjectData(objectData), NULL);
+
+      if (!pushList(normal, 3, objectData->normals))
+        return (logError("Failed to push normal at line %d", lineNumber), destroyObjectData(objectData), NULL);
+
+    } else if (!strncmp(line, "vt ", 3)) {
+      float textureCoordinates[3] = {0.0f, 0.0f, 1.0f};
+      const int parsedValues = sscanf(line, "vt %f %f %f", &textureCoordinates[0], &textureCoordinates[1], &textureCoordinates[2]);
+      if (parsedValues != 2 && parsedValues != 3)
+        return (logError("Failed to parse texture coordinates (vt) at line %d", lineNumber), destroyObjectData(objectData), NULL);
+
+      if (!pushList(textureCoordinates, 3, objectData->textureCoordinates))
+        return (logError("Failed to push normal at line %d", lineNumber), destroyObjectData(objectData), NULL);
+
+    } else if (!strncmp(line, "g ", 2)) {
+      char groupName[128];
+      if (sscanf(line, "g %s", groupName) != 1)
+        return (logError("Failed to parse group (g) at line %d", lineNumber), destroyObjectData(objectData), NULL);
+
+    } else if (!strncmp(line, "o ", 2)) {
+      char objectName[128];
+      if (sscanf(line, "o %s", objectName) != 1)
+        return (logError("Failed to parse object (o) at line %d", lineNumber), destroyObjectData(objectData), NULL);
+
+    } else if (!strncmp(line, "mtllib ", 7)) {
+      char materialFile[128];
+      if (sscanf(line, "mtllib %s", materialFile) != 1)
+        return (logError("Failed to parse material file (mtllib) at line %d", lineNumber), destroyObjectData(objectData), NULL);
+
+    } else if (!strncmp(line, "usemtl ", 7)) {
+      char materialName[128];
+      if (sscanf(line, "usemtl %s", materialName) != 1)
+        return (logError("Failed to parse material (usemtl) at line %d", lineNumber), destroyObjectData(objectData), NULL);
+
+    } else if (strncmp(line, "# ", 2)) logWarning("Failed to parse line %d", lineNumber); // Unrecognized line (not a comment)
   }
 
-  memcpy((char *)(*array) + (*arrayCount) * elementSize, pushElements, pushCount * elementSize);
-  *arrayCount += pushCount;
-  return 1;
+  return objectData;
+}
+
+static void destroyObjectData(struct ObjectData *const objectData) {
+  if (!objectData) return;
+  destroyList(objectData->positions);
+  destroyList(objectData->normals);
+  destroyList(objectData->textureCoordinates);
+  destroyList(objectData->indices);
+  free(objectData);
 }
 
 struct Object *createObject(const char *const path) {
@@ -127,74 +218,10 @@ struct Object *createObject(const char *const path) {
   struct Object *const object = calloc(1, sizeof(struct Object));
   if (!object) return (closeFile("object", file), NULL);
 
-  // Please don't use a `.obj` model with over 256 characters per line :(
-  char line[256];
+  struct ObjectData *const objectData = parseObjectData(file);
+  if (!objectData) return (destroyObject(object), closeFile("object", file), NULL);
 
-  size_t lineNumber = 0;
-  while (fgets(line, sizeof(line), file)) {
-    ++lineNumber;
-
-    if (!strncmp(line, "v ", 2)) {
-      float vertex[3] = {0.0f, 0.0f, 0.0f};
-      if (sscanf(line, "v %f %f %f", &vertex[0], &vertex[1], &vertex[2]) != 3)
-        return (logError("Failed to parse vertex (v) at line %d", lineNumber), destroyObject(object), NULL);
-
-      if (!arrayPush(vertex, 3, sizeof(float), &object->vertexCount, &object->vertexCapacity, (void ***)object->vertices))
-        return (logError("Failed to push vertex at line %d", lineNumber), destroyObject(object), NULL);
-
-    } else if (!strncmp(line, "f ", 2)) {
-      //           v - Vertex,       t - Texcoords,    n - Normal
-      unsigned int v[3] = {1, 1, 1}, t[3] = {1, 1, 1}, n[3] = {1, 1, 1};
-      const int result1 = sscanf(line, "f %u %u %u", &v[0], &v[1], &v[2]);
-      const int result2 = sscanf(line, "f %u//%u %u//%u %u//%u", &v[0], &n[0], &v[1], &n[1], &v[2], &n[2]);
-      const int result3 = sscanf(line, "f %u/%u/%u %u/%u/%u %u/%u/%u", &v[0], &t[0], &n[0], &v[1], &t[1], &n[1], &v[2], &t[2], &n[2]);
-      if (result1 != 3 && result2 != 6 && result3 != 9)
-        return (logError("Failed to parse face (f) at line %d", lineNumber), destroyObject(object), NULL);
-
-      const unsigned int indices[9] = {--v[0], --t[0], --n[0], --v[1], --t[1], --n[1], --v[2], --t[2], --n[2]};
-      if (!arrayPush(indices, 9, sizeof(unsigned int), &object->indexCount, &object->indexCapacity, (void ***)object->indices))
-        return (logError("Failed to push indices of face at line %d", lineNumber), destroyObject(object), NULL);
-
-    } else if (!strncmp(line, "vn ", 3)) {
-      float normal[3] = {0.0f, 0.0f, 0.0f};
-      if (sscanf(line, "vn %f %f %f", &normal[0], &normal[1], &normal[2]) != 3)
-        return (logError("Failed to parse normal (vn) at line %d", lineNumber), destroyObject(object), NULL);
-
-      if (!arrayPush(normal, 3, sizeof(float), &object->normalCount, &object->normalCapacity, (void ***)object->normals))
-        return (logError("Failed to push normal at line %d", lineNumber), destroyObject(object), NULL);
-
-    } else if (!strncmp(line, "vt ", 3)) {
-      float textureCoordinates[3] = {0.0f, 0.0f, 1.0f};
-      const int parsedValues = sscanf(line, "vt %f %f %f", &textureCoordinates[0], &textureCoordinates[1], &textureCoordinates[2]);
-      if (parsedValues != 2 && parsedValues != 3)
-        return (logError("Failed to parse texture coordinates (vt) at line %d", lineNumber), destroyObject(object), NULL);
-
-      if (!arrayPush(textureCoordinates, 3, sizeof(float), &object->textureCoordinateCount, &object->textureCoordinateCapacity, (void ***)object->textureCoordinates))
-        return (logError("Failed to push normal at line %d", lineNumber), destroyObject(object), NULL);
-
-    } else if (!strncmp(line, "g ", 2)) {
-      char groupName[128];
-      if (sscanf(line, "g %s", groupName) != 1)
-        return (logError("Failed to parse group (g) at line %d", lineNumber), destroyObject(object), NULL);
-
-    } else if (!strncmp(line, "o ", 2)) {
-      char objectName[128];
-      if (sscanf(line, "o %s", objectName) != 1)
-        return (logError("Failed to parse object (o) at line %d", lineNumber), destroyObject(object), NULL);
-
-    } else if (!strncmp(line, "mtllib ", 7)) {
-      char materialFile[128];
-      if (sscanf(line, "mtllib %s", materialFile) != 1)
-        return (logError("Failed to parse material file (mtllib) at line %d", lineNumber), destroyObject(object), NULL);
-
-    } else if (!strncmp(line, "usemtl ", 7)) {
-      char materialName[128];
-      if (sscanf(line, "usemtl %s", materialName) != 1)
-        return (logError("Failed to parse material (usemtl) at line %d", lineNumber), destroyObject(object), NULL);
-
-    } else if (!strncmp(line, "# ", 2)) continue;
-    else return (logError("Failed to parse line %d", lineNumber), destroyObject(object), NULL);
-  }
+  // TODO: Process data
 
   closeFile("object", file);
   return object;
