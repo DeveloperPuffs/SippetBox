@@ -10,5 +10,6 @@ layout(location = 0) out vec4 outColor;
 
 void main() {
   // Take out the `z` component of the texture coordinates since we are using a 2D texture sampler
-  outColor = texture(textureSampler2D, fragmentTextureCoordinates.xy);
+  const vec4 textureColor = texture(textureSampler2D, fragmentTextureCoordinates.xy);
+  outColor = mix(textureColor, fragmentColor, fragmentColor.a);
 }
