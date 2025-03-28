@@ -109,10 +109,10 @@ void destroyShader(struct Shader *const shader) {
 }
 
 struct ObjectData {
-  struct List *positions;
-  struct List *normals;
-  struct List *textureCoordinates;
-  struct List *indices;
+  struct Array *positions;
+  struct Array *normals;
+  struct Array *textureCoordinates;
+  struct Array *indices;
 };
 
 static void destroyObjectData(struct ObjectData *const objectData);
@@ -121,17 +121,17 @@ static struct ObjectData *parseObjectData(FILE *const file) {
   struct ObjectData *const objectData = calloc(1, sizeof(struct ObjectData));
   if (!objectData) return NULL;
 
-  if (!(objectData->positions = createList(64, sizeof(float))))
-    return (logError("Failed to create positions list"), destroyObjectData(objectData), NULL);
+  if (!(objectData->positions = createArray(64, sizeof(float))))
+    return (logError("Failed to create positions array"), destroyObjectData(objectData), NULL);
 
-  if (!(objectData->normals = createList(64, sizeof(float))))
-    return (logError("Failed to create normals list"), destroyObjectData(objectData), NULL);
+  if (!(objectData->normals = createArray(64, sizeof(float))))
+    return (logError("Failed to create normals array"), destroyObjectData(objectData), NULL);
 
-  if (!(objectData->textureCoordinates = createList(64, sizeof(float))))
-    return (logError("Failed to create texture coordinates list"), destroyObjectData(objectData), NULL);
+  if (!(objectData->textureCoordinates = createArray(64, sizeof(float))))
+    return (logError("Failed to create texture coordinates array"), destroyObjectData(objectData), NULL);
 
-  if (!(objectData->indices = createList(64, sizeof(unsigned long))))
-    return (logError("Failed to create indices list"), destroyObjectData(objectData), NULL);
+  if (!(objectData->indices = createArray(64, sizeof(unsigned long))))
+    return (logError("Failed to create indices array"), destroyObjectData(objectData), NULL);
 
   char line[256];
   size_t lineNumber = 0;
@@ -143,7 +143,7 @@ static struct ObjectData *parseObjectData(FILE *const file) {
       if (sscanf(line, "v %f %f %f", &position[0], &position[1], &position[2]) != 3)
         return (logError("Failed to parse position (v) at line %d", lineNumber), destroyObjectData(objectData), NULL);
 
-      if (!pushList(position, 3, objectData->positions))
+      if (!pushArray(position, 3, objectData->positions))
         return (logError("Failed to push position at line %d", lineNumber), destroyObjectData(objectData), NULL);
 
     } else if (!strncmp(line, "f ", 2)) {
@@ -156,7 +156,7 @@ static struct ObjectData *parseObjectData(FILE *const file) {
         return (logError("Failed to parse face (f) at line %d", lineNumber), destroyObjectData(objectData), NULL);
 
       const unsigned int indices[9] = {--p[0], --t[0], --n[0], --p[1], --t[1], --n[1], --p[2], --t[2], --n[2]};
-      if (!pushList(indices, 9, objectData->indices))
+      if (!pushArray(indices, 9, objectData->indices))
         return (logError("Failed to push indices of face at line %d", lineNumber), destroyObjectData(objectData), NULL);
 
     } else if (!strncmp(line, "vn ", 3)) {
@@ -164,7 +164,7 @@ static struct ObjectData *parseObjectData(FILE *const file) {
       if (sscanf(line, "vn %f %f %f", &normal[0], &normal[1], &normal[2]) != 3)
         return (logError("Failed to parse normal (vn) at line %d", lineNumber), destroyObjectData(objectData), NULL);
 
-      if (!pushList(normal, 3, objectData->normals))
+      if (!pushArray(normal, 3, objectData->normals))
         return (logError("Failed to push normal at line %d", lineNumber), destroyObjectData(objectData), NULL);
 
     } else if (!strncmp(line, "vt ", 3)) {
@@ -173,7 +173,7 @@ static struct ObjectData *parseObjectData(FILE *const file) {
       if (parsedValues != 2 && parsedValues != 3)
         return (logError("Failed to parse texture coordinates (vt) at line %d", lineNumber), destroyObjectData(objectData), NULL);
 
-      if (!pushList(textureCoordinates, 3, objectData->textureCoordinates))
+      if (!pushArray(textureCoordinates, 3, objectData->textureCoordinates))
         return (logError("Failed to push normal at line %d", lineNumber), destroyObjectData(objectData), NULL);
 
     } else if (!strncmp(line, "g ", 2)) {
@@ -204,10 +204,10 @@ static struct ObjectData *parseObjectData(FILE *const file) {
 
 static void destroyObjectData(struct ObjectData *const objectData) {
   if (!objectData) return;
-  destroyList(objectData->positions);
-  destroyList(objectData->normals);
-  destroyList(objectData->textureCoordinates);
-  destroyList(objectData->indices);
+  destroyArray(objectData->positions);
+  destroyArray(objectData->normals);
+  destroyArray(objectData->textureCoordinates);
+  destroyArray(objectData->indices);
   free(objectData);
 }
 
