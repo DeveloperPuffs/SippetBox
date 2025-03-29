@@ -13,14 +13,14 @@
 #include <engine/graphics.h>
 
 #define VERTEX_SIZE (13 * sizeof(float))
-#define INDEX_SIZE (sizeof(unsigned int))
+#define INDEX_SIZE (sizeof(uint32_t))
 
 struct Context {
   VkInstance vulkanInstance;
   VkDebugUtilsMessengerEXT debugMessenger;
   VkPhysicalDevice physicalDevice;
-  uint64_t graphicsQueueFamilyIndex;
-  uint64_t presentQueueFamilyIndex;
+  uint32_t graphicsQueueFamilyIndex;
+  uint32_t presentQueueFamilyIndex;
   VkDevice logicalDevice;
   VkQueue graphicsQueue;
   VkQueue presentQueue;
@@ -37,7 +37,7 @@ struct Window {
   VkImage *images;
   VkImageView *imageViews;
   VkRenderPass renderPass;
-  uint32_t shaderModuleCount;
+  size_t shaderModuleCount;
   VkShaderModule *shaderModules;
   VkDescriptorSetLayout descriptorSetLayout;
   VkPipelineLayout pipelineLayout;
@@ -52,10 +52,10 @@ struct Window {
   VkDeviceMemory textureImageMemory;
   VkImageView textureImageView;
   VkSampler textureSampler;
-  uint32_t vertexCount;
   float *vertices;
-  uint32_t indexCount;
   uint32_t *indices;
+  size_t vertexCount;
+  size_t indexCount;
   VkBuffer vertexBuffer;
   VkDeviceMemory vertexBufferMemory;
   VkBuffer indexBuffer;
@@ -189,7 +189,7 @@ struct Context *createContext() {
   if (result) return (logError("Failed to query physical devices: %s", string_VkResult(result)), destroyContext(context), NULL);
 
   uint32_t bestScore = 0;
-  for (size_t i = 0; i < (size_t)physicalDeviceCount; ++i) {
+  for (uint32_t i = 0; i < physicalDeviceCount; ++i) {
     VkPhysicalDevice const physicalDevice = physicalDevices[i];
     const uint32_t score = (
       ratePhysicalDeviceProperties(physicalDevice) +
@@ -223,7 +223,7 @@ struct Context *createContext() {
 
   uint32_t graphicsQueueFamilyIndex = UINT32_MAX;
   uint32_t presentQueueFamilyIndex = UINT32_MAX;
-  for (size_t i = 0; i < (size_t)queueFamilyCount; ++i) {
+  for (uint32_t i = 0; i < queueFamilyCount; ++i) {
     if (queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT && graphicsQueueFamilyIndex == UINT32_MAX) graphicsQueueFamilyIndex = i;
 
     VkBool32 supportsPresenting = VK_FALSE;
@@ -337,7 +337,7 @@ void destroyContext(struct Context *const context) {
 
 static inline VkBool32 callback(VkDebugUtilsMessageSeverityFlagBitsEXT severity, VkDebugUtilsMessageTypeFlagsEXT type, const VkDebugUtilsMessengerCallbackDataEXT *callbackData, void *userData) {
   char typeString[64] = {0};
-  unsigned char leadingComma = 0;
+  uint8_t leadingComma = 0;
 
   if (type & VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT) (snprintf(typeString, sizeof(typeString), "GENERAL"), leadingComma = 1);
 
@@ -447,16 +447,16 @@ static uint32_t ratePhysicalDeviceExtensions(const VkPhysicalDevice physicalDevi
   return score;
 }
 
-static inline uint8_t windowBeginFrame(struct Window *const window);
-static inline uint8_t windowEndFrame(const struct Window *const window);
-static inline uint8_t memoryAllocate(const struct Window *const window, const VkMemoryRequirements requirements, const VkMemoryPropertyFlags properties, VkDeviceMemory *memory);
-static inline uint8_t commandStart(const struct Window *const window, VkCommandBuffer *commandBuffer);
-static inline uint8_t commandFinish(const struct Window *const window, VkCommandBuffer commandBuffer);
-static inline uint8_t bufferCreate(const struct Window *const window, const VkDeviceSize size, const VkBufferUsageFlags usages, const VkMemoryPropertyFlags memoryProperties, VkBuffer *buffer, VkDeviceMemory *memory);
-static inline uint8_t bufferCopy(const struct Window *const window, VkBuffer source, VkBuffer destination, const VkDeviceSize size);
-static inline uint8_t textureLoad(const struct Window *const window, const char *const path, VkImage *texture, VkDeviceMemory *memory);
+static inline bool windowBeginFrame(struct Window *const window);
+static inline bool windowEndFrame(const struct Window *const window);
+static inline bool memoryAllocate(const struct Window *const window, const VkMemoryRequirements requirements, const VkMemoryPropertyFlags properties, VkDeviceMemory *memory);
+static inline bool commandStart(const struct Window *const window, VkCommandBuffer *commandBuffer);
+static inline bool commandFinish(const struct Window *const window, VkCommandBuffer commandBuffer);
+static inline bool bufferCreate(const struct Window *const window, const VkDeviceSize size, const VkBufferUsageFlags usages, const VkMemoryPropertyFlags memoryProperties, VkBuffer *buffer, VkDeviceMemory *memory);
+static inline bool bufferCopy(const struct Window *const window, VkBuffer source, VkBuffer destination, const VkDeviceSize size);
+static inline bool textureLoad(const struct Window *const window, const char *const path, VkImage *texture, VkDeviceMemory *memory);
 
-struct Window *createWindow(const char *const title, const unsigned int width, const unsigned int height, const struct Context *context) {
+struct Window *createWindow(const char *const title, const uint32_t width, const uint32_t height, const struct Context *context) {
   if (!context) return NULL;
   VkResult result;
 
@@ -464,19 +464,14 @@ struct Window *createWindow(const char *const title, const unsigned int width, c
   if (!window) return NULL;
 
   window->context = context;
+  window->windowExtent.width = width;
+  window->windowExtent.height = height;
   VkInstance const vulkanInstance = context->vulkanInstance;
   VkPhysicalDevice const physicalDevice = context->physicalDevice;
   VkDevice const logicalDevice = context->logicalDevice;
 
   window->sdlWindowHandle = SDL_CreateWindow(title, (int)width, (int)height, SDL_WINDOW_VULKAN);
   if (!window->sdlWindowHandle) return (logError("Failed to create SDL window: %s", SDL_GetError()), destroyWindow(window), NULL);
-
-  int windowWidth, windowHeight;
-  if (!SDL_GetWindowSizeInPixels(window->sdlWindowHandle, &windowWidth, &windowHeight)) 
-    return (logError("Failed to query SDL window size: %s", SDL_GetError()), destroyWindow(window), NULL);
-
-  window->windowExtent.width = (uint32_t)windowWidth;
-  window->windowExtent.height = (uint32_t)windowHeight;
 
   if (!SDL_Vulkan_CreateSurface(window->sdlWindowHandle, vulkanInstance, NULL, &window->surface))
     return (logError("Failed to create window surface: %s", SDL_GetError()), destroyWindow(window), NULL);
@@ -753,16 +748,16 @@ struct Window *createWindow(const char *const title, const unsigned int width, c
   VkViewport viewport = {};
   viewport.x = 0.0f;
   viewport.y = 0.0f;
-  viewport.width = (float)windowWidth;
-  viewport.height = (float)windowHeight;
+  viewport.width = (float)width;
+  viewport.height = (float)height;
   viewport.minDepth = 0.0f;
   viewport.maxDepth = 1.0f;
 
   VkRect2D scissor = {};
   scissor.offset.x = 0;
   scissor.offset.y = 0;
-  scissor.extent.width = windowWidth;
-  scissor.extent.height = windowHeight;
+  scissor.extent.width = width;
+  scissor.extent.height = height;
 
   viewportStateCreationInformation.pViewports = &viewport;
   viewportStateCreationInformation.viewportCount = 1;
@@ -928,29 +923,53 @@ struct Window *createWindow(const char *const title, const unsigned int width, c
   result = vkCreateSampler(logicalDevice, &samplerCreationInformation, NULL, &window->textureSampler);
   if (result) return (logError("Failed to create texture sampler: %s", string_VkResult(result)), destroyWindow(window), NULL);
 
-  window->vertexCount = 8;
+  /* TODO: Minimize memory copy operations
+  Before: `Object`'s data -> `Window`'s vertices -> Vertex buffer
+  After: `Object`'s data -> Vertex buffer
+  */
+
+  struct Object *const object = createObject("resources/models/cube/cube.obj");
+  if (!object) return (logError("Failed to create object"), destroyWindow(window), NULL);
+
+  // For now, this is the same as the index count because I will implement vertex deduplication later
+  window->vertexCount = object->indices->length / 3;
   if (!(window->vertices = malloc(window->vertexCount * VERTEX_SIZE))) return (destroyWindow(window), NULL);
 
-  window->indexCount = 12;
+  window->indexCount = object->indices->length / 3;
   if (!(window->indices = malloc(window->indexCount * INDEX_SIZE))) return (destroyWindow(window), NULL);
 
-  // x, y, z, i, j, k, u, v, w, r, g, b, a
-  const float vertices[] = {
-    -0.500f, -0.500f, +0.250f,    +0.000f, +0.000f, +0.000f,    +0.000f, +0.000f, +0.000f,    +1.000f, +0.000f, +0.000f, +0.100f,
-    +0.500f, -0.500f, +0.250f,    +0.000f, +0.000f, +0.000f,    +1.000f, +0.000f, +0.000f,    +0.000f, +1.000f, +0.000f, +0.100f,
-    +0.500f, +0.500f, +0.250f,    +0.000f, +0.000f, +0.000f,    +1.000f, +1.000f, +0.000f,    +0.000f, +0.000f, +1.000f, +0.100f,
-    -0.500f, +0.500f, +0.250f,    +0.000f, +0.000f, +0.000f,    +0.000f, +1.000f, +0.000f,    +1.000f, +1.000f, +1.000f, +0.100f,
+  const float *positions = (float *)object->positions->data;
+  const float *normals = (float *)object->normals->data;
+  const float *textureCoordinates = (float *)object->textureCoordinates->data;
+  const uint32_t *indices = (uint32_t *)object->indices->data;
 
-    -0.500f, -0.500f, -0.250f,    +0.000f, +0.000f, +0.000f,    +0.000f, +0.000f, +0.000f,    +1.000f, +0.000f, +0.000f, +0.900f,
-    +0.500f, -0.500f, -0.250f,    +0.000f, +0.000f, +0.000f,    +1.000f, +0.000f, +0.000f,    +0.000f, +1.000f, +0.000f, +0.900f,
-    +0.500f, +0.500f, -0.250f,    +0.000f, +0.000f, +0.000f,    +1.000f, +1.000f, +0.000f,    +0.000f, +0.000f, +1.000f, +0.900f,
-    -0.500f, +0.500f, -0.250f,    +0.000f, +0.000f, +0.000f,    +0.000f, +1.000f, +0.000f,    +1.000f, +1.000f, +1.000f, +0.900f,
-  };
+  for (size_t i = 0; i < object->indices->length / 9; ++i) {
+    for (size_t j = 0; j < 3; ++j) {
+      const size_t parsedIndexOffset = 9 * i + 3 * j;
+      const uint32_t positionIndex           = 3 * indices[parsedIndexOffset + 0];
+      const uint32_t textureCoordinatesIndex = 3 * indices[parsedIndexOffset + 1];
+      const uint32_t normalIndex             = 3 * indices[parsedIndexOffset + 2];
 
-  const uint16_t indices[] = {0, 1, 2, 2, 3, 0, 4, 5, 6, 6, 7, 4};
+      const float vertex[13] = {
+        positions[positionIndex + 0],
+        positions[positionIndex + 1],
+        positions[positionIndex + 2],
+        normals[normalIndex + 0],
+        normals[normalIndex + 1],
+        normals[normalIndex + 2],
+        textureCoordinates[textureCoordinatesIndex + 0],
+        textureCoordinates[textureCoordinatesIndex + 1],
+        textureCoordinates[textureCoordinatesIndex + 2],
+        0.0f, 0.0f, 0.0f, 0.0f
+      };
 
-  memcpy(window->vertices, &vertices, sizeof(vertices));
-  memcpy(window->indices, &indices, sizeof(indices));
+      // A vertex represented in the vertex buffer has 13 floats
+      memcpy(window->vertices + 13 * (3 * i + j), &vertex, sizeof(vertex));
+      window->indices[3 * i + j] = (uint32_t)(3 * i + j);
+    }
+  }
+
+  destroyObject(object);
 
   const VkDeviceSize vertexBufferSize = window->vertexCount * VERTEX_SIZE;
 
@@ -1081,7 +1100,7 @@ struct Window *createWindow(const char *const title, const unsigned int width, c
   // `descriptorSetAllocationInformation.pSetLayouts` 
   VkDescriptorSetLayout descriptorSetLayouts[window->maximumFramesInFlight];
 
-  for (size_t i = 0; i < (size_t)window->maximumFramesInFlight; ++i) descriptorSetLayouts[i] = window->descriptorSetLayout;
+  for (uint32_t i = 0; i < window->maximumFramesInFlight; ++i) descriptorSetLayouts[i] = window->descriptorSetLayout;
   descriptorSetAllocationInformation.pSetLayouts = descriptorSetLayouts;
 
   if (!(window->descriptorSets = calloc(window->maximumFramesInFlight, sizeof(VkDescriptorSet)))) return (destroyWindow(window), NULL);
@@ -1089,7 +1108,7 @@ struct Window *createWindow(const char *const title, const unsigned int width, c
   result = vkAllocateDescriptorSets(logicalDevice, &descriptorSetAllocationInformation, window->descriptorSets);
   if (result) return (logError("Failed to allocate descriptor sets: %s", string_VkResult(result)) ,destroyWindow(window), NULL);
 
-  for (size_t i = 0; i < (size_t)window->maximumFramesInFlight; ++i) {
+  for (uint32_t i = 0; i < window->maximumFramesInFlight; ++i) {
     VkDescriptorBufferInfo descriptorBufferInformation = {};
     descriptorBufferInformation.range = sizeof(window->uniformBufferObject);
     descriptorBufferInformation.buffer = window->uniformBuffers[i];
@@ -1125,7 +1144,7 @@ struct Window *createWindow(const char *const title, const unsigned int width, c
   }
 
   if (!(window->framebuffers = calloc(window->imageCount, sizeof(VkFramebuffer)))) return (destroyWindow(window), NULL);
-  for (size_t i = 0; i < (size_t)window->imageCount; ++i) {
+  for (uint32_t i = 0; i < window->imageCount; ++i) {
     const VkImageView framebufferAttachments[] = {window->imageViews[i], window->depthImageView};
     const size_t framebufferAttachmentCount = sizeof(framebufferAttachments) / sizeof(framebufferAttachments[0]);
 
@@ -1134,8 +1153,8 @@ struct Window *createWindow(const char *const title, const unsigned int width, c
     framebufferCreationInformation.renderPass = window->renderPass;
     framebufferCreationInformation.attachmentCount = framebufferAttachmentCount;
     framebufferCreationInformation.pAttachments = framebufferAttachments;
-    framebufferCreationInformation.width = (uint32_t)windowWidth;
-    framebufferCreationInformation.height = (uint32_t)windowHeight;
+    framebufferCreationInformation.width = width;
+    framebufferCreationInformation.height = height;
     framebufferCreationInformation.layers = 1;
 
     result = vkCreateFramebuffer(logicalDevice, &framebufferCreationInformation, NULL, &window->framebuffers[i]);
@@ -1153,7 +1172,7 @@ struct Window *createWindow(const char *const title, const unsigned int width, c
   fenceCreationInformation.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
   fenceCreationInformation.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
-  for (size_t i = 0; i < (size_t)window->maximumFramesInFlight; ++i) {
+  for (uint32_t i = 0; i < window->maximumFramesInFlight; ++i) {
     result = vkCreateSemaphore(logicalDevice, &semaphoreCreationInformation, NULL, &window->imageAvailableSemaphores[i]);
     if (result) return (logError("Failed to create image available semaphore #%d: %s", i, string_VkResult(result)), destroyWindow(window), NULL);
     result = vkCreateSemaphore(logicalDevice, &semaphoreCreationInformation, NULL, &window->renderFinishedSemaphores[i]);
@@ -1166,15 +1185,15 @@ struct Window *createWindow(const char *const title, const unsigned int width, c
   return window;
 }
 
-unsigned char updateWindow(struct Window *const window) {
-  if (!windowEndFrame(window)) return 0;
+bool updateWindow(struct Window *const window) {
+  if (!windowEndFrame(window)) return false;
 
   // Move to the next frame to get the corresponding command buffer, and synchronization objects
   window->frameIndex = (window->frameIndex + 1) % window->maximumFramesInFlight;
   return windowBeginFrame(window);
 }
 
-static inline uint8_t windowBeginFrame(struct Window *const window) {
+static inline bool windowBeginFrame(struct Window *const window) {
   VkResult result;
 
   VkDevice const logicalDevice = window->context->logicalDevice;
@@ -1183,25 +1202,28 @@ static inline uint8_t windowBeginFrame(struct Window *const window) {
   VkSemaphore const renderFinishedSemaphore = window->renderFinishedSemaphores[window->frameIndex];
   VkFence const inFlightFence = window->inFlightFences[window->frameIndex];
 
-  result = vkWaitForFences(logicalDevice, 1, &inFlightFence, VK_TRUE, UINT64_MAX);
-  if (result) return (logError("Failed to wait for in flight fence #%d: %s", window->frameIndex, string_VkResult(result)), 0);
-  result = vkResetFences(logicalDevice, 1, &inFlightFence);
-  if (result) return (logError("Failed to reset in flight fence #%d: %s", window->frameIndex, string_VkResult(result)), 0);
-  result = vkAcquireNextImageKHR(logicalDevice, window->swapchain, UINT64_MAX, imageAvailableSemaphore, VK_NULL_HANDLE, &window->imageIndex);
-  if (result) return (logError("Failed to acquire next swapchain image: %s", string_VkResult(result)), 0);
-  result = vkResetCommandBuffer(commandBuffer, 0);
-  if (result) return (logError("Failed to reset command buffer #%d: %s", window->frameIndex, string_VkResult(result)), 0);
+  if ((result = vkWaitForFences(logicalDevice, 1, &inFlightFence, VK_TRUE, UINT64_MAX)))
+    return (logError("Failed to wait for in flight fence #%d: %s", window->frameIndex, string_VkResult(result)), false);
+
+  if ((result = vkResetFences(logicalDevice, 1, &inFlightFence)))
+    return (logError("Failed to reset in flight fence #%d: %s", window->frameIndex, string_VkResult(result)), false);
+
+  if ((result = vkAcquireNextImageKHR(logicalDevice, window->swapchain, UINT64_MAX, imageAvailableSemaphore, VK_NULL_HANDLE, &window->imageIndex)))
+    return (logError("Failed to acquire next swapchain image: %s", string_VkResult(result)), false);
+
+  if ((result = vkResetCommandBuffer(commandBuffer, 0)))
+    return (logError("Failed to reset command buffer #%d: %s", window->frameIndex, string_VkResult(result)), false);
 
   VkCommandBufferBeginInfo commandBufferBeginningInformation = {};
   commandBufferBeginningInformation.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 
-  result = vkBeginCommandBuffer(commandBuffer, &commandBufferBeginningInformation);
-  if (result) return (logError("Failed to begin command buffer #%d: %s", window->frameIndex, string_VkResult(result)), 0);
+  if ((result = vkBeginCommandBuffer(commandBuffer, &commandBufferBeginningInformation)))
+    return (logError("Failed to begin command buffer #%d: %s", window->frameIndex, string_VkResult(result)), 0);
 
   return 1;
 }
 
-static inline uint8_t windowEndFrame(const struct Window *const window) {
+static inline bool windowEndFrame(const struct Window *const window) {
   VkResult result;
 
   struct Context const *context = window->context;
@@ -1212,7 +1234,7 @@ static inline uint8_t windowEndFrame(const struct Window *const window) {
   VkFence const inFlightFence = window->inFlightFences[window->frameIndex];
 
   result = vkEndCommandBuffer(commandBuffer);
-  if (result) return (logError("Failed to end command buffer #%d: %s", window->frameIndex, string_VkResult(result)), 0);
+  if (result) return (logError("Failed to end command buffer #%d: %s", window->frameIndex, string_VkResult(result)), false);
 
   VkSubmitInfo submissionInformation = {};
   submissionInformation.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -1227,7 +1249,7 @@ static inline uint8_t windowEndFrame(const struct Window *const window) {
   submissionInformation.pWaitDstStageMask = waitStages;
 
   result = vkQueueSubmit(context->graphicsQueue, 1, &submissionInformation, inFlightFence);
-  if (result) return (logError("Failed to submit command buffer #%d: %s", window->frameIndex, string_VkResult(result)), 0);
+  if (result) return (logError("Failed to submit command buffer #%d: %s", window->frameIndex, string_VkResult(result)), false);
 
   VkPresentInfoKHR presentationInformation = {};
   presentationInformation.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
@@ -1239,9 +1261,9 @@ static inline uint8_t windowEndFrame(const struct Window *const window) {
   presentationInformation.pResults = NULL;
 
   result = vkQueuePresentKHR(context->presentQueue, &presentationInformation);
-  if (result) return (logError("Failed to present image: %s", window->frameIndex, string_VkResult(result)), 0);
+  if (result) return (logError("Failed to present image: %s", window->frameIndex, string_VkResult(result)), false);
 
-  return 1;
+  return true;
 }
 
 void drawSomething(struct Window *const window) {
@@ -1295,7 +1317,7 @@ void drawSomething(struct Window *const window) {
   VkDeviceSize offsets[1] = {0};
   vkCmdBindVertexBuffers(commandBuffer, 0, 1, &window->vertexBuffer, offsets);
 
-  vkCmdBindIndexBuffer(commandBuffer, window->indexBuffer, 0, VK_INDEX_TYPE_UINT16);
+  vkCmdBindIndexBuffer(commandBuffer, window->indexBuffer, 0, VK_INDEX_TYPE_UINT32);
 
   vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, window->pipelineLayout, 0, 1, &window->descriptorSets[window->frameIndex], 0, NULL);
 
@@ -1318,7 +1340,7 @@ void destroyWindow(struct Window *const window) {
   if (result) logWarning("Failed to end last command buffer #%d: %s", window->frameIndex, string_VkResult(result));
 
   vkDeviceWaitIdle(logicalDevice);
-  for (size_t i = 0; i < (size_t)window->maximumFramesInFlight; ++i) {
+  for (uint32_t i = 0; i < window->maximumFramesInFlight; ++i) {
     vkDestroyFence(logicalDevice, window->inFlightFences[i], NULL);
     vkDestroySemaphore(logicalDevice, window->renderFinishedSemaphores[i], NULL);
     vkDestroySemaphore(logicalDevice, window->imageAvailableSemaphores[i], NULL);
@@ -1355,7 +1377,7 @@ void destroyWindow(struct Window *const window) {
   free(commandBuffers);
   vkDestroyPipeline(logicalDevice, window->pipeline, NULL);
   vkDestroyPipelineLayout(logicalDevice, window->pipelineLayout, NULL);
-  for (size_t i = 0; i < (size_t)window->shaderModuleCount; ++i) vkDestroyShaderModule(logicalDevice, window->shaderModules[i], NULL);
+  for (size_t i = 0; i < window->shaderModuleCount; ++i) vkDestroyShaderModule(logicalDevice, window->shaderModules[i], NULL);
   free(window->shaderModules);
   vkDestroyRenderPass(logicalDevice, window->renderPass, NULL);
   for (uint32_t i = 0; i < window->imageCount; ++i) vkDestroyImageView(logicalDevice, window->imageViews[i], NULL);
@@ -1367,7 +1389,7 @@ void destroyWindow(struct Window *const window) {
   free(window);
 }
 
-static inline uint8_t memoryAllocate(const struct Window *const window, const VkMemoryRequirements requirements, const VkMemoryPropertyFlags properties, VkDeviceMemory *memory) {
+static inline bool memoryAllocate(const struct Window *const window, const VkMemoryRequirements requirements, const VkMemoryPropertyFlags properties, VkDeviceMemory *memory) {
   VkResult result;
 
   VkPhysicalDeviceMemoryProperties physicalDeviceMemoryProperties;
@@ -1378,7 +1400,7 @@ static inline uint8_t memoryAllocate(const struct Window *const window, const Vk
   memoryAllocationInformation.allocationSize = requirements.size;
 
   memoryAllocationInformation.memoryTypeIndex = UINT32_MAX;
-  for (size_t i = 0; i < (size_t)physicalDeviceMemoryProperties.memoryTypeCount; ++i) {
+  for (uint32_t i = 0; i < physicalDeviceMemoryProperties.memoryTypeCount; ++i) {
     if ((requirements.memoryTypeBits & (1 << i)) && (physicalDeviceMemoryProperties.memoryTypes[i].propertyFlags & properties) == properties) {
       memoryAllocationInformation.memoryTypeIndex = i;
       break;
@@ -1386,15 +1408,15 @@ static inline uint8_t memoryAllocate(const struct Window *const window, const Vk
   }
 
   if (memoryAllocationInformation.memoryTypeIndex == UINT32_MAX)
-    return (logError("Failed to find suitable physical device memory type for memory allocation"), 0);
+    return (logError("Failed to find suitable physical device memory type for memory allocation"), false);
 
   result = vkAllocateMemory(window->context->logicalDevice, &memoryAllocationInformation, NULL, memory);
-  if (result) return (logError("Failed to allocate memory: %s", string_VkResult(result)), 0);
+  if (result) return (logError("Failed to allocate memory: %s", string_VkResult(result)), false);
 
-  return 1;
+  return true;
 }
 
-static inline uint8_t commandStart(const struct Window *const window, VkCommandBuffer *commandBuffer) {
+static inline bool commandStart(const struct Window *const window, VkCommandBuffer *commandBuffer) {
   VkResult result;
 
   VkCommandBufferAllocateInfo commandBufferAllocationInformation = {};
@@ -1404,7 +1426,7 @@ static inline uint8_t commandStart(const struct Window *const window, VkCommandB
   commandBufferAllocationInformation.commandBufferCount = 1;
 
   result = vkAllocateCommandBuffers(window->context->logicalDevice, &commandBufferAllocationInformation, commandBuffer);
-  if (result) return (logError("Failed to allocate single time command buffer: %s", string_VkResult(result)), 0);
+  if (result) return (logError("Failed to allocate single time command buffer: %s", string_VkResult(result)), false);
 
   VkCommandBufferBeginInfo commandBufferBeginningInformation = {};
   commandBufferBeginningInformation.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -1414,20 +1436,20 @@ static inline uint8_t commandStart(const struct Window *const window, VkCommandB
   if (result) {
     logError("Failed to begin single time command buffer: %s", string_VkResult(result));
     vkFreeCommandBuffers(window->context->logicalDevice, window->commandPool, 1, commandBuffer);
-    return 0;
+    return false;
   }
 
-  return 1;
+  return true;
 }
 
-static inline uint8_t commandFinish(const struct Window *const window, VkCommandBuffer commandBuffer) {
+static inline bool commandFinish(const struct Window *const window, VkCommandBuffer commandBuffer) {
   VkResult result;
 
   result = vkEndCommandBuffer(commandBuffer);
   if (result) {
     logError("Failed to end single time command buffer: %s", string_VkResult(result));
     vkFreeCommandBuffers(window->context->logicalDevice, window->commandPool, 1, &commandBuffer);
-    return 0;
+    return false;
   }
 
   VkSubmitInfo submissionInformation = {};
@@ -1439,21 +1461,21 @@ static inline uint8_t commandFinish(const struct Window *const window, VkCommand
   if (result) {
     logError("Failed to submit single time command buffer to graphics queue: %s", string_VkResult(result));
     vkFreeCommandBuffers(window->context->logicalDevice, window->commandPool, 1, &commandBuffer);
-    return 0;
+    return false;
   }
 
   result = vkQueueWaitIdle(window->context->graphicsQueue);
   if (result) {
     logError("Failed to wait for graphics queue: %s", string_VkResult(result));
     vkFreeCommandBuffers(window->context->logicalDevice, window->commandPool, 1, &commandBuffer);
-    return 0;
+    return false;
   }
 
   vkFreeCommandBuffers(window->context->logicalDevice, window->commandPool, 1, &commandBuffer);
-  return 1;
+  return true;
 }
 
-static inline uint8_t bufferCreate(const struct Window *const window, const VkDeviceSize size, const VkBufferUsageFlags usages, const VkMemoryPropertyFlags memoryProperties, VkBuffer *buffer, VkDeviceMemory *memory) {
+static inline bool bufferCreate(const struct Window *const window, const VkDeviceSize size, const VkBufferUsageFlags usages, const VkMemoryPropertyFlags memoryProperties, VkBuffer *buffer, VkDeviceMemory *memory) {
   VkResult result;
 
   VkBufferCreateInfo bufferCreationInformation = {};
@@ -1463,14 +1485,14 @@ static inline uint8_t bufferCreate(const struct Window *const window, const VkDe
   bufferCreationInformation.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
   result = vkCreateBuffer(window->context->logicalDevice, &bufferCreationInformation, NULL, buffer);
-  if (result) return (logError("Failed to create buffer: %s", string_VkResult(result)), 0);
+  if (result) return (logError("Failed to create buffer: %s", string_VkResult(result)), false);
 
   VkMemoryRequirements memoryRequirements;
   vkGetBufferMemoryRequirements(window->context->logicalDevice, *buffer, &memoryRequirements);
   if (!memoryAllocate(window, memoryRequirements, memoryProperties, memory)) {
     logError("Failed to allocate memory for buffer: %s", string_VkResult(result));
     vkDestroyBuffer(window->context->logicalDevice, *buffer, NULL);
-    return 0;
+    return false;
   }
 
   result = vkBindBufferMemory(window->context->logicalDevice, *buffer, *memory, 0);
@@ -1478,31 +1500,31 @@ static inline uint8_t bufferCreate(const struct Window *const window, const VkDe
     logError("Failed to bind buffer memory: %s", string_VkResult(result));
     vkDestroyBuffer(window->context->logicalDevice, *buffer, NULL);
     vkFreeMemory(window->context->logicalDevice, *memory, NULL);
-    return 0;
+    return false;
   }
 
-  return 1;
+  return true;
 }
 
-static inline uint8_t bufferCopy(const struct Window *const window, VkBuffer source, VkBuffer destination, const VkDeviceSize size) {
+static inline bool bufferCopy(const struct Window *const window, VkBuffer source, VkBuffer destination, const VkDeviceSize size) {
   VkCommandBuffer commandBuffer;
-  if (!commandStart(window, &commandBuffer)) return (logError("Failed to start single time command buffer"), 0);
+  if (!commandStart(window, &commandBuffer)) return (logError("Failed to start single time command buffer"), false);
 
   VkBufferCopy bufferCopyRegion = {};
   bufferCopyRegion.size = size;
   vkCmdCopyBuffer(commandBuffer, source, destination, 1, &bufferCopyRegion);
 
-  if (!commandFinish(window, commandBuffer)) return (logError("Failed to finish single time command buffer"), 0);
-  return 1;
+  if (!commandFinish(window, commandBuffer)) return (logError("Failed to finish single time command buffer"), false);
+  return true;
 }
 
-static inline uint8_t imageLayoutTransition(const struct Window *const window, VkImage image, const VkFormat format, const VkImageLayout previousLayout, const VkImageLayout nextLayout);
-static inline uint8_t bufferCopyToImage(const struct Window *const window, VkBuffer buffer, VkImage image, const uint32_t width, const uint32_t height);
-static inline uint8_t textureLoad(const struct Window *const window, const char *const path, VkImage *texture, VkDeviceMemory *memory) {
+static inline bool imageLayoutTransition(const struct Window *const window, VkImage image, const VkFormat format, const VkImageLayout previousLayout, const VkImageLayout nextLayout);
+static inline bool bufferCopyToImage(const struct Window *const window, VkBuffer buffer, VkImage image, const uint32_t width, const uint32_t height);
+static inline bool textureLoad(const struct Window *const window, const char *const path, VkImage *texture, VkDeviceMemory *memory) {
   VkResult result;
 
   struct Image *const image = createImage(path);
-  if (!image) return (logError("Failed to create image"), 0);
+  if (!image) return (logError("Failed to create image"), false);
 
   const VkDeviceSize imageSize = 4 * image->width * image->height;
 
@@ -1522,7 +1544,7 @@ static inline uint8_t textureLoad(const struct Window *const window, const char 
     return 0;
   }
 
-  for (size_t i = 0; i < (size_t)image->height; ++i) memcpy((uint8_t *)stagingBufferData + i * image->width * 4, image->data[i], image->width * 4);
+  for (size_t i = 0; i < image->height; ++i) memcpy((uint8_t *)stagingBufferData + i * image->width * 4, image->data[i], image->width * 4);
   vkUnmapMemory(window->context->logicalDevice, stagingBufferMemory);
 
   VkImageCreateInfo imageCreationInformation = {};
@@ -1547,7 +1569,7 @@ static inline uint8_t textureLoad(const struct Window *const window, const char 
     vkDestroyBuffer(window->context->logicalDevice, stagingBuffer, NULL);
     vkFreeMemory(window->context->logicalDevice, stagingBufferMemory, NULL);
     destroyImage(image);
-    return 0;
+    return false;
   }
 
   VkMemoryRequirements imageMemoryRequirements;
@@ -1558,7 +1580,7 @@ static inline uint8_t textureLoad(const struct Window *const window, const char 
     vkDestroyBuffer(window->context->logicalDevice, stagingBuffer, NULL);
     vkFreeMemory(window->context->logicalDevice, stagingBufferMemory, NULL);
     destroyImage(image);
-    return 0;
+    return false;
   }
 
   result = vkBindImageMemory(window->context->logicalDevice, *texture, *memory, 0);
@@ -1567,7 +1589,7 @@ static inline uint8_t textureLoad(const struct Window *const window, const char 
     vkDestroyBuffer(window->context->logicalDevice, stagingBuffer, NULL);
     vkFreeMemory(window->context->logicalDevice, stagingBufferMemory, NULL);
     destroyImage(image);
-    return 0;
+    return false;
   }
 
   if (!imageLayoutTransition(window, *texture, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)) {
@@ -1575,7 +1597,7 @@ static inline uint8_t textureLoad(const struct Window *const window, const char 
     vkDestroyBuffer(window->context->logicalDevice, stagingBuffer, NULL);
     vkFreeMemory(window->context->logicalDevice, stagingBufferMemory, NULL);
     destroyImage(image);
-    return 0;
+    return false;
   }
 
   if (!bufferCopyToImage(window, stagingBuffer, *texture, (uint32_t)image->width, (uint32_t)image->height)) {
@@ -1583,7 +1605,7 @@ static inline uint8_t textureLoad(const struct Window *const window, const char 
     vkDestroyBuffer(window->context->logicalDevice, stagingBuffer, NULL);
     vkFreeMemory(window->context->logicalDevice, stagingBufferMemory, NULL);
     destroyImage(image);
-    return 0;
+    return false;
   }
 
   if (!imageLayoutTransition(window, *texture, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)) {
@@ -1591,18 +1613,18 @@ static inline uint8_t textureLoad(const struct Window *const window, const char 
     vkDestroyBuffer(window->context->logicalDevice, stagingBuffer, NULL);
     vkFreeMemory(window->context->logicalDevice, stagingBufferMemory, NULL);
     destroyImage(image);
-    return 0;
+    return false;
   }
 
   vkDestroyBuffer(window->context->logicalDevice, stagingBuffer, NULL);
   vkFreeMemory(window->context->logicalDevice, stagingBufferMemory, NULL);
   destroyImage(image);
-  return 1;
+  return true;
 }
 
-static inline uint8_t imageLayoutTransition(const struct Window *const window, VkImage image, const VkFormat format, const VkImageLayout previousLayout, const VkImageLayout nextLayout) {
+static inline bool imageLayoutTransition(const struct Window *const window, VkImage image, const VkFormat format, const VkImageLayout previousLayout, const VkImageLayout nextLayout) {
   VkCommandBuffer commandBuffer;
-  if (!commandStart(window, &commandBuffer)) return (logError("Failed to start single time command buffer"), 0);
+  if (!commandStart(window, &commandBuffer)) return (logError("Failed to start single time command buffer"), false);
 
   VkImageMemoryBarrier imageMemoryBarrier = {};
   imageMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -1630,16 +1652,16 @@ static inline uint8_t imageLayoutTransition(const struct Window *const window, V
     imageMemoryBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
     sourceStages = VK_PIPELINE_STAGE_TRANSFER_BIT;
     destinationStages = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-  } else return (logError("Unsupported image layout transition from '%s' to '%s'", string_VkImageLayout(previousLayout), string_VkImageLayout(nextLayout)), commandFinish(window, commandBuffer), 0);
+  } else return (logError("Unsupported image layout transition from '%s' to '%s'", string_VkImageLayout(previousLayout), string_VkImageLayout(nextLayout)), commandFinish(window, commandBuffer), false);
 
   vkCmdPipelineBarrier(commandBuffer, sourceStages, destinationStages, 0, 0, NULL, 0, NULL, 1, &imageMemoryBarrier);
-  if (!commandFinish(window, commandBuffer)) return (logError("Failed to finish single time command buffer"), 0);
-  return 1;
+  if (!commandFinish(window, commandBuffer)) return (logError("Failed to finish single time command buffer"), false);
+  return true;
 }
 
-static inline uint8_t bufferCopyToImage(const struct Window *const window, VkBuffer buffer, VkImage image, const uint32_t width, const uint32_t height) {
+static inline bool bufferCopyToImage(const struct Window *const window, VkBuffer buffer, VkImage image, const uint32_t width, const uint32_t height) {
   VkCommandBuffer commandBuffer;
-  if (!commandStart(window, &commandBuffer)) return (logError("Failed to start single time command buffer"), 0);
+  if (!commandStart(window, &commandBuffer)) return (logError("Failed to start single time command buffer"), false);
 
   VkBufferImageCopy bufferImageCopyRegion = {};
   bufferImageCopyRegion.bufferOffset = 0;
@@ -1657,6 +1679,6 @@ static inline uint8_t bufferCopyToImage(const struct Window *const window, VkBuf
   bufferImageCopyRegion.imageExtent.depth = 1;
 
   vkCmdCopyBufferToImage(commandBuffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &bufferImageCopyRegion);
-  if (!commandFinish(window, commandBuffer)) return (logError("Failed to finish single time command buffer"), 0);
-  return 1;
+  if (!commandFinish(window, commandBuffer)) return (logError("Failed to finish single time command buffer"), false);
+  return true;
 }

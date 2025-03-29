@@ -1,4 +1,6 @@
 #pragma once
+#include <stdbool.h>
+#include <stdint.h>
 
 /**
  * Stores resources that can be shared between multiple renderers/windows.
@@ -25,14 +27,14 @@ struct Window;
  * title as a string and the initial dimensions of the window as positive integers. Is associated
  * with the given instance of `Context`.
  */
-struct Window *createWindow(const char *const title, const unsigned int width, const unsigned int height, const struct Context *context);
+struct Window *createWindow(const char *const title, const uint32_t width, const uint32_t height, const struct Context *context);
 
 /**
  * Draws a frame on a `Window` by submitting the recorded rendering commands for execution, and
- * then for presenting after the rendering operations have been executed on the GPU. Returns `1`
- * for success and `0` for failure.
+ * then for presenting after the rendering operations have been executed on the GPU. Returns `true`
+ * for success and `false` for failure.
  */
-unsigned char updateWindow(struct Window *const window);
+bool updateWindow(struct Window *const window);
 
 /**
  * Draws something onto the window :)

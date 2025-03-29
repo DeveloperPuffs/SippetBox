@@ -2,6 +2,21 @@
 #include <string.h>
 #include <engine/math.h>
 
+void cross3D(const float vector1[3], const float vector2[3], float result[3]) {
+  result[0] = vector1[1] * vector2[2] - vector1[2] * vector2[1];
+  result[1] = vector1[2] * vector2[0] - vector1[0] * vector2[2];
+  result[2] = vector1[0] * vector2[1] - vector1[1] * vector2[0];
+}
+
+void normalize3D(float vector[3]) {
+  const float length = sqrtf(vector[0] * vector[0] + vector[1] * vector[1] + vector[2] * vector[2]);
+  if (length > 0.0f) {
+    vector[0] /= length;
+    vector[1] /= length;
+    vector[2] /= length;
+  }
+}
+
 static const size_t FLOAT_SIZE = sizeof(float);
 static const size_t MATRIX_SIZE_4x4 = 16 * FLOAT_SIZE;
 

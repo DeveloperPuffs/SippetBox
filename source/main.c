@@ -1,3 +1,4 @@
+#include <stdbool.h>
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
 #include <engine/logging.h>
@@ -27,7 +28,7 @@ int main() {
   if (!(state.window = createWindow("SippetBox", 640, 480, state.context)))
     return (logError("Failed to create window"), terminate(&state, 1));
 
-  while (1) {
+  while (true) {
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
       if (event.type == SDL_EVENT_QUIT) return terminate(&state, 0);
@@ -47,5 +48,6 @@ static int terminate(struct State *const state, const int exitCode) {
   destroyContext(state->context);
   SDL_Vulkan_UnloadLibrary();
   SDL_Quit();
+
   return exitCode;
 }

@@ -1,6 +1,16 @@
 #pragma once
 
 /**
+ * Calculates the cross product of two 3D vectors.
+ */
+void cross3D(const float vector1[3], const float vector2[3], float result[3]);
+
+/**
+ * Normalizes a 3D vector.
+ */
+void normalize3D(float vector[3]);
+
+/**
  * Initializes a 4x4 matrix as an identity matrix.
  */
 void matrixIdentity4x4(float matrix[4][4]);

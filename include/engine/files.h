@@ -1,4 +1,6 @@
 #pragma once
+#include <stdint.h>
+#include <engine/collections.h>
 
 /**
  * Stores data about a bitmap image, captured at a specific time.
@@ -7,27 +9,27 @@ struct Image {
   /**
    * The width of the bitmap image in pixels.
    */
-  unsigned int width;
+  size_t width;
 
   /**
    * The height of the bitmap image in pixels.
    */
-  unsigned int height;
+  size_t height;
 
   /**
    * The number of color channels (3 for RGB, 4 for RGBA).
    */
-  unsigned char channels;
+  uint8_t channels;
 
   /**
    * The number of bits per channel.
    */
-  unsigned char depth;
+  uint8_t depth;
 
   /**
    * The data of the bitmap image.
    */
-  unsigned char **data;
+  uint8_t **data;
 };
 
 /**
@@ -47,12 +49,12 @@ struct Shader {
   /**
    * The size of the shader code in bytes.
    */
-  unsigned long size;
+  size_t size;
 
   /**
    * The binary data of the shader code.
    */
-  unsigned int *data;
+  uint32_t *data;
 };
 
 /**
@@ -70,83 +72,26 @@ void destroyShader(struct Shader *const shader);
  */
 struct Object {
   /**
-   * The coordinates of the vertices of the model as a flat array of floats where each three
-   * consecutive floats represent one vertex (`{x, y, z, x, y, z, x, y, z, ...}`).
+   * The positions parsed from the object as a flat array of `float`s (`x, y, z`).
    */
-  float *vertices;
+  struct Array *positions;
 
   /**
-   * The number of coordinates/elements in `float *Object::vertices`.
+   * The normals parsed or computed from the object as a flat array of `float`s (`i, j, k`).
    */
-  unsigned long vertexCount;
+  struct Array *normals;
 
   /**
-   * The maximum number of coordinates/elements `float *Object::vertices` can hold.
+   * The texture coordinates parsed from the object as a flat array of `float`s (`u, v, w`).
    */
-  unsigned long vertexCapacity;
+  struct Array *textureCoordinates;
 
   /**
-   * The indices of the model, representing the faces of the model. Stored in a flat array of
-   * unsigned integers.
+   * The indices parsed from the object as a flat array of `uint32_t`s (`positions[0],
+   * positions[1], positions[2], normals[0], normals[1], textureCoordinates[0],
+   * textureCoordinates[1], textureCoordinates[2]`).
    */
-  unsigned long *indices;
-
-  /**
-   * The number of individual indices in `unsigned int *Object::indices`.
-   */
-  unsigned long indexCount;
-
-  /**
-   * The maximum number of indices `unsigned int *Object::indices` can hold.
-   */
-  unsigned long indexCapacity;
-
-  /**
-   * The coordinates of the normals of the model as a flat array of floats where each three
-   * consecutive floats represent one normal (`{x, y, z, x, y, z, x, y, z, ...}`).
-   */
-  float *normals;
-
-  /**
-   * The number of coordinates/elements in `float *Object::normals`.
-   */
-  unsigned long normalCount;
-
-  /**
-   * The maximum number of coordinates/elements `float *Object::normals` can hold.
-   */
-  unsigned long normalCapacity;
-
-  /**
-   * The coordinates of the texture of the model as a flat array of floats where each three
-   * consecutive floats represent one vertex (`{u, v, w, u, v, w, u, v, w, ...}`).
-   */
-  float *textureCoordinates;
-
-  /**
-   * The number of coordinates/elements in `float *Object::textureCoordinates`.
-   */
-  unsigned long textureCoordinateCount;
-
-  /**
-   * The maximum number of coordinates/elements `float *Object::textureCoordinates` can hold.
-   */
-  unsigned long textureCoordinateCapacity;
-
-  /**
-   * The names of the material files (`.mtl`) used by the model.
-   */
-  char **const materialFiles;
-
-  /**
-   * The number of material files used by the model.
-   */
-  unsigned long materialFileCount;
-
-  /**
-   * The total number of material file names `char **const Object::materialFiles` can hold.
-   */
-  unsigned long materialFileCapacity;
+  struct Array *indices;
 };
 
 /**

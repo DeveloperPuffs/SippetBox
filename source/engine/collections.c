@@ -1,9 +1,10 @@
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 #include <engine/logging.h>
 #include <engine/collections.h>
 
-struct Array *createArray(const unsigned long capacity, const unsigned long size) {
+struct Array *createArray(const size_t capacity, const size_t size) {
   if (!size) return (logError("Invalid size for array"), NULL);
 
   struct Array *const array = malloc(sizeof(struct Array));
@@ -13,7 +14,7 @@ struct Array *createArray(const unsigned long capacity, const unsigned long size
   return array->capacity ? (array->data = malloc(capacity * size)) ? array : (free(array), NULL) : array;
 }
 
-unsigned char pushArray(const void *const data, const unsigned long count, struct Array *const array) {
+bool pushArray(const void *const data, const size_t count, struct Array *const array) {
   if (!count) return 1;
 
   if (!data) return (logError("Cannot push invalid data to array"), 0);
@@ -23,11 +24,12 @@ unsigned char pushArray(const void *const data, const unsigned long count, struc
     array->capacity = 2 * (array->capacity + count);
     void *reallocatedArray = realloc(array->data, array->capacity * array->size);
     if (!reallocatedArray) return 0;
-    *array->data = reallocatedArray;
+    array->data = reallocatedArray;
   }
 
   memcpy((char *)array->data + array->length * array->size, data, count * array->size);
-  return (array->length += count, 1);
+  array->length += count;
+  return 1;
 }
 
 void destroyArray(struct Array *const array) {
@@ -50,14 +52,14 @@ struct Table *createTable() {
   return table;
 }
 
-static unsigned long hashFunction(const char *key, const unsigned long size) {
-  unsigned long hash = HASH_MULTIPLIER;
+static size_t hashFunction(const char *key, const size_t size) {
+  size_t hash = HASH_MULTIPLIER;
   while (*key) hash = ((hash << 5) + hash) + *key++;
   return hash % size;
 }
 
 void *getTable(const struct Table *const table, const char *key) {
-  const unsigned long index = hashFunction(key, table->size);
+  const size_t index = hashFunction(key, table->size);
   struct TableEntry *entry = table->buckets[index];
   while (entry) {
     if (!strcmp(entry->key, key)) return entry->value;
@@ -67,17 +69,17 @@ void *getTable(const struct Table *const table, const char *key) {
   return NULL;
 }
 
-static unsigned char resizeTable(struct Table *const table) {
-  const unsigned long newSize = 2 * table->size;
+static bool resizeTable(struct Table *const table) {
+  const size_t newSize = 2 * table->size;
   struct TableEntry **newBuckets = calloc(newSize, sizeof(struct TableEntry *));
   if (!newBuckets) return 0;
 
-  for (unsigned long i = 0; i < table->size; i++) {
+  for (size_t i = 0; i < table->size; i++) {
       struct TableEntry *entry = table->buckets[i];
       while (entry) {
           struct TableEntry *next = entry->next;
 
-          const unsigned long newIndex = hashFunction(entry->key, newSize);
+          const size_t newIndex = hashFunction(entry->key, newSize);
           entry->next = newBuckets[newIndex];
           newBuckets[newIndex] = entry;
 
@@ -91,10 +93,10 @@ static unsigned char resizeTable(struct Table *const table) {
   return 1;
 }
 
-unsigned char setTable(struct Table *const table, const char *key, void *value) {
+bool setTable(struct Table *const table, const char *key, void *value) {
   if ((double)table->count / table->size > TABLE_LOAD_FACTOR && !resizeTable(table)) return 0;
 
-  const unsigned long index = hashFunction(key, table->size);
+  const size_t index = hashFunction(key, table->size);
   struct TableEntry *entry = table->buckets[index];
   while (entry) {
     if (!strcmp(entry->key, key)) return (entry->value = value, 1);
@@ -113,7 +115,7 @@ unsigned char setTable(struct Table *const table, const char *key, void *value) 
 
 void destroyTable(struct Table *const table, void (*const freeValueFunction)(void *)) {
   if (!table) return;
-  for (unsigned long i = 0; i < table->size; ++i) {
+  for (size_t i = 0; i < table->size; ++i) {
     struct TableEntry *entry = table->buckets[i];
     while (entry) {
       struct TableEntry *nextEntry = entry->next;

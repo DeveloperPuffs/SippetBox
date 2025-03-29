@@ -1,4 +1,6 @@
 #pragma once
+#include <stdbool.h>
+#include <stdint.h>
 
 /**
  * Represents a dynamic array (resizable).
@@ -12,28 +14,28 @@ struct Array {
   /**
    * The number of elements in the `void **Array::data`.
    */
-  unsigned long length;
+  size_t length;
 
   /**
    * The maximum number of elements `void **Array::data` can hold.
    */
-  unsigned long capacity;
+  size_t capacity;
 
   /**
    * The size of each element in `void **Array::data`.
    */
-  unsigned long size;
+  size_t size;
 };
 
 /**
  * Allocates memory for a `Array` given its capacity and element size.
  */
-struct Array *createArray(const unsigned long capacity, const unsigned long size);
+struct Array *createArray(const size_t capacity, const size_t size);
 
 /**
  * Pushes some data into a `Array`.
  */
-unsigned char pushArray(const void *const data, const unsigned long count, struct Array *const array);
+bool pushArray(const void *const data, const size_t count, struct Array *const array);
 
 /**
  * Frees the memory of a `Array`.
@@ -57,8 +59,8 @@ struct TableEntry {
  */
 struct Table {
   struct TableEntry **buckets;
-  unsigned long count;
-  unsigned long size;
+  size_t count;
+  size_t size;
 };
 
 /**
@@ -76,7 +78,7 @@ void *getTable(const struct Table *const table, const char *key);
  * Inserts a or updates key-value pair into the hash table. Returns `1` for success and `0` for
  * failure.
  */
-unsigned char setTable(struct Table *const table, const char *key, void *value);
+bool setTable(struct Table *const table, const char *key, void *value);
 
 /**
  * Frees all memory associated with the hash table, including keys, values, and entries. If a free
