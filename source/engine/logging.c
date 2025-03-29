@@ -48,7 +48,7 @@ static unsigned char ansi() {
 void logError(const char *format, ...) {
   va_list args;
   va_start(args, format);
-  fprintf(stderr, ANSI ? "\033[1;31mERROR\033[22;0m:     " : "ERROR:      ");
+  fprintf(stderr, ANSI ? "\033[1;31mERROR\033[22;0m:         " : "ERROR:         ");
   vfprintf(stderr, format, args);
   fprintf(stderr, "\n");
   va_end(args);
@@ -57,7 +57,7 @@ void logError(const char *format, ...) {
 void logWarning(const char *format, ...) {
   va_list args;
   va_start(args, format);
-  fprintf(stderr, ANSI ? "\033[1;33mWARNING\033[22;0m:     " : "WARNING:    ");
+  fprintf(stderr, ANSI ? "\033[1;33mWARNING\033[22;0m:       " : "WARNING:       ");
   vfprintf(stderr, format, args);
   fprintf(stderr, "\n");
   va_end(args);
@@ -66,7 +66,7 @@ void logWarning(const char *format, ...) {
 void logInformation(const char *format, ...) {
   va_list args;
   va_start(args, format);
-  fprintf(stderr, ANSI ? "\033[1;37mINFORMATION\033[22;0m:   " : "INFORMATION:  ");
+  fprintf(stderr, ANSI ? "\033[1;37mINFORMATION\033[22;0m:   " : "INFORMATION:   ");
   vfprintf(stdout, format, args);
   fprintf(stdout, "\n");
   va_end(args);
@@ -75,7 +75,7 @@ void logInformation(const char *format, ...) {
 void logDebug(const char *format, ...) {
   va_list args;
   va_start(args, format);
-  fprintf(stderr, ANSI ? "\033[1;34mDEBUG\033[22;0m:     " : "DEBUG:      ");
+  fprintf(stderr, ANSI ? "\033[1;34mDEBUG\033[22;0m:        " : "DEBUG:         ");
   vfprintf(stdout, format, args);
   fprintf(stdout, "\n");
   va_end(args);
