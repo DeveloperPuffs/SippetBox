@@ -884,7 +884,7 @@ struct Window *createWindow(const char *const title, const uint32_t width, const
   result = vkCreateImageView(logicalDevice, &depthImageViewCreationInformation, NULL, &window->depthImageView);
   if (result) return (logError("Failed to create depth image view: %s", string_VkResult(result)), destroyWindow(window), NULL);
 
-  const char *const imageFilePath = "resources/images/textures/squares.png";
+  const char *const imageFilePath = "resources/models/pirate_ship/Textures/colormap.png";
   if (!textureLoad(window, imageFilePath, &window->textureImage, &window->textureImageMemory))
     return (logError("Failed to load texture image"), destroyWindow(window), NULL);
 
@@ -928,7 +928,7 @@ struct Window *createWindow(const char *const title, const uint32_t width, const
   After: `Object`'s data -> Vertex buffer
   */
 
-  struct Object *const object = createObject("resources/models/cube/cube.obj");
+  struct Object *const object = createObject("resources/models/pirate_ship/ship-pirate-large.obj");
   if (!object) return (logError("Failed to create object"), destroyWindow(window), NULL);
 
   // For now, this is the same as the index count because I will implement vertex deduplication later
@@ -957,13 +957,12 @@ struct Window *createWindow(const char *const title, const uint32_t width, const
         normals[normalIndex + 0],
         normals[normalIndex + 1],
         normals[normalIndex + 2],
-        textureCoordinates[textureCoordinatesIndex + 0],
-        textureCoordinates[textureCoordinatesIndex + 1],
-        textureCoordinates[textureCoordinatesIndex + 2],
+        0.0f + textureCoordinates[textureCoordinatesIndex + 0],
+        1.0f - textureCoordinates[textureCoordinatesIndex + 1],
+        0.0f + textureCoordinates[textureCoordinatesIndex + 2],
         0.0f, 0.0f, 0.0f, 0.0f
       };
 
-      // A vertex represented in the vertex buffer has 13 floats
       memcpy(window->vertices + 13 * (3 * i + j), &vertex, sizeof(vertex));
       window->indices[3 * i + j] = (uint32_t)(3 * i + j);
     }
@@ -1296,16 +1295,16 @@ void drawSomething(struct Window *const window) {
   clock_gettime(CLOCK_MONOTONIC, &time);
   const float currentTime = time.tv_sec + time.tv_nsec / 1e9;
 
-  const float rotationAxis[3] = {0.0f, 0.0f, 1.0f};
+  const float rotationAxis[3] = {0.0f, 1.0f, 0.0f};
   matrixRotate4x4(window->uniformBufferObject.model, currentTime * radians * 90.0f, rotationAxis);
 
-  const float pov[3] = {2.0f, 2.0f, 2.0f};
+  const float pov[3] = {20.0f, 20.0f, 10.0f};
   const float center[3] = {0.0f, 0.0f, 0.0f};
-  const float up[3] = {0.0f, 0.0f, 1.0f};
+  const float up[3] = {0.0f, 1.0f, 0.0f};
   matrixView4x4(window->uniformBufferObject.view, pov, center, up);
 
   float aspectRatio = window->windowExtent.width / (float)window->windowExtent.height;
-  matrixPerspective4x4(window->uniformBufferObject.projection, radians * 45.0f, aspectRatio, 0.1f, 10.0f);
+  matrixPerspective4x4(window->uniformBufferObject.projection, radians * 45.0f, aspectRatio, 0.05f, 1000.0f);
 
   window->uniformBufferObject.projection[1][1] *= -1.0f;
 
