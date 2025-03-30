@@ -53,9 +53,6 @@ struct Window {
   VkDeviceMemory textureImageMemory;
   VkImageView textureImageView;
   VkSampler textureSampler;
-  float *vertices;
-  uint32_t *indices;
-  size_t vertexCount;
   size_t indexCount;
   VkBuffer vertexBuffer;
   VkDeviceMemory vertexBufferMemory;
@@ -924,20 +921,55 @@ struct Window *createWindow(const struct Application *application, const char *c
   if ((result = vkCreateSampler(logicalDevice, &samplerCreationInformation, NULL, &window->textureSampler)))
     return (logError("Failed to create texture sampler: %s", string_VkResult(result)), destroyWindow(window), NULL);
 
-  /* TODO: Minimize memory copy operations
-  Before: `Object`'s data -> `Window`'s vertices -> Vertex buffer
-  After: `Object`'s data -> Vertex buffer
-  */
-
   struct Object *const object = createObject("resources/models/pirate_ship/ship-pirate-large.obj");
   if (!object) return (logError("Failed to create object"), destroyWindow(window), NULL);
 
   // For now, this is the same as the index count because I will implement vertex deduplication later
-  window->vertexCount = object->indices->length / 3;
-  if (!(window->vertices = malloc(window->vertexCount * VERTEX_SIZE))) return (destroyWindow(window), NULL);
-
   window->indexCount = object->indices->length / 3;
-  if (!(window->indices = malloc(window->indexCount * INDEX_SIZE))) return (destroyWindow(window), NULL);
+  const VkDeviceSize vertexBufferSize = window->indexCount * VERTEX_SIZE;
+  const VkDeviceSize indexBufferSize = window->indexCount * INDEX_SIZE;
+
+  VkBuffer vertexStagingBuffer;
+  VkDeviceMemory vertexStagingBufferMemory;
+  const VkBufferUsageFlagBits vertexStagingBufferUsages = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+  const VkMemoryPropertyFlags vertexStagingBufferMemoryProperties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+  if (!bufferCreate(window, vertexBufferSize, vertexStagingBufferUsages, vertexStagingBufferMemoryProperties, &vertexStagingBuffer, &vertexStagingBufferMemory))
+    return (logError("Failed to create vertex staging buffer"), destroyWindow(window), destroyObject(object), NULL);
+
+  void *vertexStagingBufferData;
+  if ((result = vkMapMemory(logicalDevice, vertexStagingBufferMemory, 0, vertexBufferSize, 0, &vertexStagingBufferData))) {
+    logError("Failed to map staging buffer memory: %s", string_VkResult(result));
+    vkDestroyBuffer(logicalDevice, vertexStagingBuffer, NULL);
+    vkFreeMemory(logicalDevice, vertexStagingBufferMemory, NULL);
+    destroyWindow(window);
+    destroyObject(object);
+    return NULL;
+  }
+
+  VkBuffer indexStagingBuffer;
+  VkDeviceMemory indexStagingBufferMemory;
+  const VkBufferUsageFlagBits indexStagingBufferUsages = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+  const VkMemoryPropertyFlags indexStagingBufferMemoryProperties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+  if (!bufferCreate(window, indexBufferSize, indexStagingBufferUsages, indexStagingBufferMemoryProperties, &indexStagingBuffer, &indexStagingBufferMemory)) {
+    logError("Failed to create index staging buffer");
+    vkDestroyBuffer(logicalDevice, vertexStagingBuffer, NULL);
+    vkFreeMemory(logicalDevice, vertexStagingBufferMemory, NULL);
+    destroyWindow(window);
+    destroyObject(object);
+    return NULL;
+  }
+
+  void *indexStagingBufferData;
+  if ((result = vkMapMemory(logicalDevice, indexStagingBufferMemory, 0, indexBufferSize, 0, &indexStagingBufferData))) {
+    logError("Failed to map staging buffer memory: %s", string_VkResult(result));
+    vkDestroyBuffer(logicalDevice, vertexStagingBuffer, NULL);
+    vkFreeMemory(logicalDevice, vertexStagingBufferMemory, NULL);
+    vkDestroyBuffer(logicalDevice, indexStagingBuffer, NULL);
+    vkFreeMemory(logicalDevice, indexStagingBufferMemory, NULL);
+    destroyWindow(window);
+    destroyObject(object);
+    return NULL;
+  }
 
   const float *positions = (float *)object->positions->data;
   const float *normals = (float *)object->normals->data;
@@ -964,40 +996,23 @@ struct Window *createWindow(const struct Application *application, const char *c
         0.0f, 0.0f, 0.0f, 0.0f
       };
 
-      memcpy(window->vertices + 13 * (3 * i + j), &vertex, sizeof(vertex));
-      window->indices[3 * i + j] = (uint32_t)(3 * i + j);
+      memcpy((float *)vertexStagingBufferData + 13 * (3 * i + j), &vertex, sizeof(vertex));
+      ((uint32_t *)indexStagingBufferData)[3 * i + j] = (uint32_t)(3 * i + j);
     }
   }
 
   destroyObject(object);
-
-  const VkDeviceSize vertexBufferSize = window->vertexCount * VERTEX_SIZE;
-
-  VkBuffer vertexStagingBuffer;
-  VkDeviceMemory vertexStagingBufferMemory;
-  const VkBufferUsageFlagBits vertexStagingBufferUsages = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-  const VkMemoryPropertyFlags vertexStagingBufferMemoryProperties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-  if (!bufferCreate(window, vertexBufferSize, vertexStagingBufferUsages, vertexStagingBufferMemoryProperties, &vertexStagingBuffer, &vertexStagingBufferMemory))
-    return (logError("Failed to create vertex staging buffer"), destroyWindow(window), NULL);
-
-  void *vertexStagingBufferData;
-  if ((result = vkMapMemory(logicalDevice, vertexStagingBufferMemory, 0, vertexBufferSize, 0, &vertexStagingBufferData))) {
-    logError("Failed to map staging buffer memory: %s", string_VkResult(result));
-    vkDestroyBuffer(logicalDevice, vertexStagingBuffer, NULL);
-    vkFreeMemory(logicalDevice, vertexStagingBufferMemory, NULL);
-    destroyWindow(window);
-    return NULL;
-  }
-
-  memcpy(vertexStagingBufferData, window->vertices, vertexBufferSize);
   vkUnmapMemory(logicalDevice, vertexStagingBufferMemory);
-
+  vkUnmapMemory(logicalDevice, indexStagingBufferMemory);
+  
   const VkBufferUsageFlagBits vertexBufferUsages = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
   const VkMemoryPropertyFlags vertexBufferMemoryProperties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
   if (!bufferCreate(window, vertexBufferSize, vertexBufferUsages, vertexBufferMemoryProperties, &window->vertexBuffer, &window->vertexBufferMemory)) {
     logError("Failed to create vertex buffer");
     vkDestroyBuffer(logicalDevice, vertexStagingBuffer, NULL);
     vkFreeMemory(logicalDevice, vertexStagingBufferMemory, NULL);
+    vkDestroyBuffer(logicalDevice, indexStagingBuffer, NULL);
+    vkFreeMemory(logicalDevice, indexStagingBufferMemory, NULL);
     destroyWindow(window);
     return NULL;
   }
@@ -1006,34 +1021,15 @@ struct Window *createWindow(const struct Application *application, const char *c
     logError("Failed to copy staging buffer onto vertex buffer");
     vkDestroyBuffer(logicalDevice, vertexStagingBuffer, NULL);
     vkFreeMemory(logicalDevice, vertexStagingBufferMemory, NULL);
-    destroyWindow(window);
-    return NULL;
-  }
-
-  vkDestroyBuffer(logicalDevice, vertexStagingBuffer, NULL);
-  vkFreeMemory(logicalDevice, vertexStagingBufferMemory, NULL);
-
-  const VkDeviceSize indexBufferSize = window->indexCount * INDEX_SIZE;
-
-  VkBuffer indexStagingBuffer;
-  VkDeviceMemory indexStagingBufferMemory;
-  const VkBufferUsageFlagBits indexStagingBufferUsages = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-  const VkMemoryPropertyFlags indexStagingBufferMemoryProperties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-  if (!bufferCreate(window, indexBufferSize, indexStagingBufferUsages, indexStagingBufferMemoryProperties, &indexStagingBuffer, &indexStagingBufferMemory))
-    return (logError("Failed to create index staging buffer"), destroyWindow(window), NULL);
-
-  void *indexStagingBufferData;
-  if ((result = vkMapMemory(logicalDevice, indexStagingBufferMemory, 0, indexBufferSize, 0, &indexStagingBufferData))) {
-    logError("Failed to map staging buffer memory: %s", string_VkResult(result));
     vkDestroyBuffer(logicalDevice, indexStagingBuffer, NULL);
     vkFreeMemory(logicalDevice, indexStagingBufferMemory, NULL);
     destroyWindow(window);
     return NULL;
   }
 
-  memcpy(indexStagingBufferData, window->indices, indexBufferSize);
-  vkUnmapMemory(logicalDevice, indexStagingBufferMemory);
-
+  vkDestroyBuffer(logicalDevice, vertexStagingBuffer, NULL);
+  vkFreeMemory(logicalDevice, vertexStagingBufferMemory, NULL);
+  
   const VkBufferUsageFlagBits indexBufferUsages = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
   const VkMemoryPropertyFlags indexBufferMemoryProperties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
   if (!bufferCreate(window, indexBufferSize, indexBufferUsages, indexBufferMemoryProperties, &window->indexBuffer, &window->indexBufferMemory)) {
@@ -1041,6 +1037,7 @@ struct Window *createWindow(const struct Application *application, const char *c
     vkDestroyBuffer(logicalDevice, indexStagingBuffer, NULL);
     vkFreeMemory(logicalDevice, indexStagingBufferMemory, NULL);
     destroyWindow(window);
+    destroyObject(object);
     return NULL;
   }
 
@@ -1049,6 +1046,7 @@ struct Window *createWindow(const struct Application *application, const char *c
     vkDestroyBuffer(logicalDevice, indexStagingBuffer, NULL);
     vkFreeMemory(logicalDevice, indexStagingBufferMemory, NULL);
     destroyWindow(window);
+    destroyObject(object);
     return NULL;
   }
 
@@ -1360,8 +1358,6 @@ void destroyWindow(struct Window *const window) {
   vkFreeMemory(logicalDevice, window->indexBufferMemory, NULL);
   vkDestroyBuffer(logicalDevice, window->vertexBuffer, NULL);
   vkFreeMemory(logicalDevice, window->vertexBufferMemory, NULL);
-  free(window->indices);
-  free(window->vertices);
   vkDestroySampler(logicalDevice, window->textureSampler, NULL);
   vkDestroyImageView(logicalDevice, window->textureImageView, NULL);
   vkDestroyImage(logicalDevice, window->textureImage, NULL);
