@@ -3,19 +3,19 @@
 #include <stdint.h>
 
 /**
- * Stores resources that can be shared between multiple renderers/windows.
+ * Stores resources typically used in one application that can be used to create windows.
  */
-struct Context;
+struct Application;
 
 /**
- * Creates an instance of `Context` and initializes its resources.
+ * Creates an instance of `Application` and initializes its resources.
  */
-struct Context *createContext();
+struct Application *createApplication(const char *name);
 
 /**
- * Destroys an instance of `Context` by freeing its resources.
+ * Destroys an instance of `Application` by freeing its resources.
  */
-void destroyContext(struct Context *const context);
+void destroyApplication(struct Application *const application);
 
 /**
  * Stores resources used by a window for creating an environment that can be renderered on.
@@ -25,9 +25,9 @@ struct Window;
 /**
  * Creates an instance of `Window` and initializes its resources. Opens an SDL window with the
  * title as a string and the initial dimensions of the window as positive integers. Is associated
- * with the given instance of `Context`.
+ * with the given instance of `Application`.
  */
-struct Window *createWindow(const char *const title, const uint32_t width, const uint32_t height, const struct Context *context);
+struct Window *createWindow(const struct Application *application, const char *const title, const uint32_t width, const uint32_t height);
 
 /**
  * Draws a frame on a `Window` by submitting the recorded rendering commands for execution, and

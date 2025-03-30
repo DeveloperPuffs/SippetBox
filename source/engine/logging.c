@@ -32,14 +32,13 @@ static unsigned char ansi() {
   const char *term = getenv("TERM");
   if (!term) return 0;
 
-  return (
-    strstr(term, "screen") != NULL ||
-    strstr(term, "xterm") != NULL ||
-    strstr(term, "vt100") != NULL ||
-    strstr(term, "linux") != NULL ||
-    strstr(term, "tmux") != NULL ||
-    strstr(term, "rxvt") != NULL
-  );
+  return
+    strstr(term, "screen") ||
+    strstr(term, "xterm") ||
+    strstr(term, "vt100") ||
+    strstr(term, "linux") ||
+    strstr(term, "tmux") ||
+    strstr(term, "rxvt");
 }
 #endif
 

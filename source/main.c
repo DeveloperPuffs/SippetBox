@@ -5,7 +5,7 @@
 #include <engine/graphics.h>
 
 struct State {
-  struct Context *context;
+  struct Application *application;
   struct Window *window;
 };
 
@@ -13,7 +13,7 @@ static int terminate(struct State *const state, const int exitCode);
 
 int main() {
   struct State state = {};
-  state.context = NULL;
+  state.application = NULL;
   state.window = NULL;
 
   if (!SDL_Init(SDL_INIT_VIDEO))
@@ -22,10 +22,10 @@ int main() {
   if (!SDL_Vulkan_LoadLibrary(NULL))
     return (logError("Failed to load Vulkan library: %s", SDL_GetError()), terminate(&state, 1));
 
-  if (!(state.context = createContext()))
-    return (logError("Failed to create context"), terminate(&state, 1));
+  if (!(state.application = createApplication("SippetBox")))
+    return (logError("Failed to create application"), terminate(&state, 1));
 
-  if (!(state.window = createWindow("SippetBox", 640, 480, state.context)))
+  if (!(state.window = createWindow(state.application, "SippetBox", 640, 480)))
     return (logError("Failed to create window"), terminate(&state, 1));
 
   while (true) {
@@ -45,7 +45,7 @@ int main() {
 
 static int terminate(struct State *const state, const int exitCode) {
   destroyWindow(state->window);
-  destroyContext(state->context);
+  destroyApplication(state->application);
   SDL_Vulkan_UnloadLibrary();
   SDL_Quit();
 
