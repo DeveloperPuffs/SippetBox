@@ -29,15 +29,15 @@ int main() {
     return (logError("Failed to create window"), terminate(&state, 1));
 
   while (true) {
+    if (!updateWindow(state.window))
+      return (logError("Failed to update window"), terminate(&state, 1));
+
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
       if (event.type == SDL_EVENT_QUIT) return terminate(&state, 0);
     }
 
-    drawSomething(state.window);
-
-    if (!updateWindow(state.window))
-      return (logError("Failed to update window"), terminate(&state, 1));
+    drawSomething(state.window);    
   }
 
   return terminate(&state, 0);

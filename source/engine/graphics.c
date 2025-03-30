@@ -69,6 +69,7 @@ struct Window {
   VkFence *inFlightFences;
   uint32_t imageIndex;
   uint32_t frameIndex;
+  bool pendingFrame;
   struct UniformBufferObject {
     float model[4][4];
     float view[4][4];
@@ -1175,12 +1176,12 @@ struct Window *createWindow(const struct Application *application, const char *c
       return (logError("Failed to create in flight fence #%d: %s", i, string_VkResult(result)), destroyWindow(window), NULL);
   }
 
-  if (!windowBeginFrame(window)) return (destroyWindow(window), NULL);
   return window;
 }
 
 bool updateWindow(struct Window *const window) {
-  if (!windowEndFrame(window)) return false;
+  if (window->pendingFrame && !windowEndFrame(window)) return false;
+  window->pendingFrame = true;
 
   // Move to the next frame to get the corresponding command buffer, and synchronization objects
   window->frameIndex = (window->frameIndex + 1) % window->maximumFramesInFlight;
@@ -1330,7 +1331,7 @@ void destroyWindow(struct Window *const window) {
   VkDevice const logicalDevice = application->logicalDevice;
   VkCommandBuffer *commandBuffers = window->commandBuffers;
 
-  if ((result = vkEndCommandBuffer(commandBuffers[window->frameIndex])))
+  if (window->pendingFrame && (result = vkEndCommandBuffer(commandBuffers[window->frameIndex])))
     logWarning("Failed to end last command buffer #%d: %s", window->frameIndex, string_VkResult(result));
 
   vkDeviceWaitIdle(logicalDevice);
