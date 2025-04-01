@@ -1,9 +1,8 @@
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
 #include <time.h>
-#include <SDL3/SDL.h>
-#include <SDL3/SDL_vulkan.h>
 #include <vulkan/vulkan.h>
 #include <vulkan/vk_enum_string_helper.h>
 #include <engine/math.h>
@@ -11,6 +10,14 @@
 #include <engine/platform.h>
 #include <engine/logging.h>
 #include <engine/graphics.h>
+
+#ifdef PLATFORM_APPLE
+#include <vulkan/vulkan_metal.h>
+#include <engine/cocoa.h>
+#else
+#include <SDL3/SDL.h>
+#include <SDL3/SDL_vulkan.h>
+#endif
 
 #define VERTEX_SIZE (13 * sizeof(float))
 #define INDEX_SIZE (sizeof(uint32_t))
@@ -29,8 +36,12 @@ struct Application {
 
 struct Window {
   const struct Application *application;
-  SDL_Window *sdlWindowHandle;
   VkExtent2D windowExtent;
+#ifdef PLATFORM_APPLE
+  struct CocoaWindow *cocoaWindow;
+#else
+  SDL_Window *sdlWindow;
+#endif
   VkSurfaceKHR surface;
   VkSurfaceFormatKHR surfaceFormat;
   VkSwapchainKHR swapchain;
@@ -105,60 +116,49 @@ struct Application *createApplication(const char *name) {
   applicationInformation.apiVersion = VK_API_VERSION_1_0;
   instanceCreationInformation.pApplicationInfo = &applicationInformation;
 
-#ifdef NDEBUG
-  const char *const instanceLayers[] = {};
-#else
   /*
-    "VK_LAYER_KHRONOS_validation"
+    Debug: "VK_LAYER_KHRONOS_validation"
     For reporting error messages about potential API misuse and, performance issues, or invalid synchronization
   */
   const char *const instanceLayers[] = {
-    "VK_LAYER_KHRONOS_validation"
-  };
+#ifndef NDEBUG
+    "VK_LAYER_KHRONOS_validation",
 #endif
+  };
 
   const size_t instanceLayerCount = sizeof(instanceLayers) / sizeof(instanceLayers[0]);
   instanceCreationInformation.enabledLayerCount = instanceLayerCount;
   instanceCreationInformation.ppEnabledLayerNames = instanceLayers;
 
-  Uint32 sdlInstanceExtensionCount = 0;
-  const char *const *const sdlInstanceExtensions = SDL_Vulkan_GetInstanceExtensions(&sdlInstanceExtensionCount);
-  if (!sdlInstanceExtensions) return (logError("Failed to query SDL Vulkan instance extensions: %s", SDL_GetError()), destroyApplication(application), NULL);
-
-#ifdef PLATFORM_APPLE
   /*
-    VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME
-    For running Vulkan on a macOS environment via MoltenVK
+    VK_KHR_SURFACE_EXTENSION_NAME
+    Enables creation of window surfaces
 
-    VK_EXT_DEBUG_UTILS_EXTENSION_NAME
-    For setting up a debug messenger associated with the Vulkan instance
+    Debug: VK_EXT_DEBUG_UTILS_EXTENSION_NAME
+    Provides support for setting up a debug messenger associated with the Vulkan instance
+
+    Apple: VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME
+    Enables running Vulkan on a macOS environment via MoltenVK
+
+    Apple: VK_EXT_METAL_SURFACE_EXTENSION_NAME
+    Provides support for setting up Apple window surfaces for Vulkan via the Metal API
   */
-  const char *const additionalInstanceExtensions[] = {
-    VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME,
-    VK_EXT_DEBUG_UTILS_EXTENSION_NAME
-  };
-#else
-  /*
-    VK_EXT_DEBUG_UTILS_EXTENSION_NAME
-    For setting up a debug messenger associated with the Vulkan instance
-  */
-  const char *const additionalInstanceExtensions[] = {
-    VK_EXT_DEBUG_UTILS_EXTENSION_NAME
-  };
+  const char *const instanceExtensions[] = {
+    VK_KHR_SURFACE_EXTENSION_NAME,
+#ifndef NDEBUG
+    VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
 #endif
+#ifdef PLATFORM_APPLE
+    VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME,
+    VK_EXT_METAL_SURFACE_EXTENSION_NAME,
+#endif
+  };
 
-  const size_t additionalInstanceExtensionCount = sizeof(additionalInstanceExtensions) / sizeof(additionalInstanceExtensions[0]);
-  const size_t instanceExtensionCount = (size_t)sdlInstanceExtensionCount + additionalInstanceExtensionCount;
-  const char **const instanceExtensions = malloc(instanceExtensionCount * sizeof(const char *));
-  if (!instanceExtensions) return (destroyApplication(application), NULL);
-  memcpy(instanceExtensions, sdlInstanceExtensions, (size_t)sdlInstanceExtensionCount * sizeof(const char *));
-  memcpy(instanceExtensions + (size_t)sdlInstanceExtensionCount, additionalInstanceExtensions, additionalInstanceExtensionCount * sizeof(const char *));
-  instanceCreationInformation.enabledExtensionCount = instanceExtensionCount;
   instanceCreationInformation.ppEnabledExtensionNames = instanceExtensions;
+  instanceCreationInformation.enabledExtensionCount = sizeof(instanceExtensions) / sizeof(instanceExtensions[0]);
 
   if ((result = vkCreateInstance(&instanceCreationInformation, NULL, &application->vulkanInstance)))
-    return (logError("Failed to create Vulkan instance: %s", string_VkResult(result)), free(instanceExtensions), destroyApplication(application), NULL);
-  free(instanceExtensions);
+    return (logError("Failed to create Vulkan instance: %s", string_VkResult(result)), destroyApplication(application), NULL);
 
   VkDebugUtilsMessengerCreateInfoEXT debugMessengerCreationInformation = {0};
   debugMessengerCreationInformation.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
@@ -214,12 +214,28 @@ struct Application *createApplication(const char *name) {
   vkGetPhysicalDeviceQueueFamilyProperties(application->physicalDevice, &queueFamilyCount, queueFamilies);
 
   // A window and a window surface have to be created to ensure that the present queue family supports presenting to a window surface created in this application
+
+#ifdef PLATFORM_APPLE
+  struct CocoaWindow *const windowModel = createCocoaWindow("", 1, 1);
+  if (!windowModel) return (logError("Failed to create window model"), free(queueFamilies), destroyApplication(application), NULL);
+
+  VkMetalSurfaceCreateInfoEXT metalSurfaceCreationInformation = {};
+  metalSurfaceCreationInformation.sType = VK_STRUCTURE_TYPE_METAL_SURFACE_CREATE_INFO_EXT;
+  metalSurfaceCreationInformation.pLayer = getCocoaWindowMetalLayer(windowModel);
+  metalSurfaceCreationInformation.flags = 0;
+  metalSurfaceCreationInformation.pNext = NULL;
+
+  VkSurfaceKHR surfaceModel;
+  if ((result = vkCreateMetalSurfaceEXT(application->vulkanInstance, &metalSurfaceCreationInformation, NULL, &surfaceModel)))
+    return (logError("Failed to create Cocoa window surface"), free(queueFamilies), destroyCocoaWindow(windowModel), destroyApplication(application), NULL); 
+#else
   SDL_Window *const windowModel = SDL_CreateWindow("", 1, 1, SDL_WINDOW_VULKAN);
-  if (!windowModel) return (logError("Failed to create window model: %s", SDL_GetError()), destroyApplication(application), free(queueFamilies), NULL);
+  if (!windowModel) return (logError("Failed to create window model: %s", SDL_GetError()), free(queueFamilies), destroyApplication(application), NULL);
 
   VkSurfaceKHR surfaceModel;
   if (!SDL_Vulkan_CreateSurface(windowModel, application->vulkanInstance, NULL, &surfaceModel))
-    return (logError("Failed to create surface model: %s", SDL_GetError()), destroyApplication(application), SDL_DestroyWindow(windowModel), free(queueFamilies), NULL);
+    return (logError("Failed to create surface model: %s", SDL_GetError()), free(queueFamilies), SDL_DestroyWindow(windowModel), destroyApplication(application), NULL);
+#endif
 
   uint32_t graphicsQueueFamilyIndex = UINT32_MAX;
   uint32_t presentQueueFamilyIndex = UINT32_MAX;
@@ -227,8 +243,7 @@ struct Application *createApplication(const char *name) {
     if (queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT && graphicsQueueFamilyIndex == UINT32_MAX) graphicsQueueFamilyIndex = i;
 
     VkBool32 supportsPresenting = VK_FALSE;
-    result = vkGetPhysicalDeviceSurfaceSupportKHR(application->physicalDevice, i, surfaceModel, &supportsPresenting);
-    if (result) {
+    if ((result = vkGetPhysicalDeviceSurfaceSupportKHR(application->physicalDevice, i, surfaceModel, &supportsPresenting))) {
       logWarning("Failed to query physical device surface queue family %d presenting support verdict: %s", i, string_VkResult(result));
       continue;
     }
@@ -236,9 +251,15 @@ struct Application *createApplication(const char *name) {
     if (supportsPresenting && presentQueueFamilyIndex == UINT32_MAX) presentQueueFamilyIndex = i;
   }
 
+  free(queueFamilies);
+
+#ifdef PLATFORM_APPLE
+  vkDestroySurfaceKHR(application->vulkanInstance, surfaceModel, NULL);
+  destroyCocoaWindow(windowModel);
+#else
   vkDestroySurfaceKHR(application->vulkanInstance, surfaceModel, NULL);
   SDL_DestroyWindow(windowModel);
-  free(queueFamilies);
+#endif
 
   if (graphicsQueueFamilyIndex == UINT32_MAX || presentQueueFamilyIndex == UINT32_MAX)
     return (logError("Failed to find suitable queue family indices"), destroyApplication(application), NULL);
@@ -266,17 +287,15 @@ struct Application *createApplication(const char *name) {
   deviceCreationInformation.pQueueCreateInfos = queueCreationInformations;
   deviceCreationInformation.queueCreateInfoCount = queueCreationInformationCount;
 
-#ifdef NDEBUG
-  const char *const logicalDeviceLayers[] = {};
-#else
   /*
-    "VK_LAYER_KHRONOS_validation"
+    Debug: "VK_LAYER_KHRONOS_validation"
     For reporting error messages about potential API misuse and, performance issues, or invalid synchronization
   */
   const char *const logicalDeviceLayers[] = {
-    "VK_LAYER_KHRONOS_validation"
-  };
+#ifndef NDEBUG
+    "VK_LAYER_KHRONOS_validation",
 #endif
+  };
 
   const size_t logicalDeviceLayerCount = sizeof(logicalDeviceLayers) / sizeof(logicalDeviceLayers[0]);
   deviceCreationInformation.enabledLayerCount = logicalDeviceLayerCount;
@@ -285,27 +304,19 @@ struct Application *createApplication(const char *name) {
   // TODO: Enable the following logical device extensions for ray tracing or path tracing:
   // VK_KHR_acceleration_structure, VK_KHR_ray_tracing_pipeline, VK_KHR_deferred_host_operations
 
-#ifdef PLATFORM_APPLE
   /*
     VK_KHR_SWAPCHAIN_EXTENSION_NAME
-    For presenting on a window surface
+    Enables presenting images on a windowed surface
 
-    "VK_KHR_portability_subset"
-    For running Vulkan on a macOS environment via MoltenVK
+    Apple: "VK_KHR_portability_subset"
+    Enables running Vulkan on a macOS environment via MoltenVK
   */
   const char *const logicalDeviceExtensions[] = {
     VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-    "VK_KHR_portability_subset"
-  };
-#else
-  /*
-    VK_KHR_SWAPCHAIN_EXTENSION_NAME
-    For presenting on a window surface
-  */
-  const char *const logicalDeviceExtensions[] = {
-    VK_KHR_SWAPCHAIN_EXTENSION_NAME
-  };
+#ifdef PLATFORM_APPLE
+    "VK_KHR_portability_subset",
 #endif
+  };
 
   const size_t logicalDeviceExtensionCount = sizeof(logicalDeviceExtensions) / sizeof(logicalDeviceExtensions[0]);
   deviceCreationInformation.enabledExtensionCount = logicalDeviceExtensionCount;
@@ -470,11 +481,25 @@ struct Window *createWindow(const struct Application *application, const char *c
   VkPhysicalDevice const physicalDevice = application->physicalDevice;
   VkDevice const logicalDevice = application->logicalDevice;
 
-  window->sdlWindowHandle = SDL_CreateWindow(title, (int)width, (int)height, SDL_WINDOW_VULKAN);
-  if (!window->sdlWindowHandle) return (logError("Failed to create SDL window: %s", SDL_GetError()), destroyWindow(window), NULL);
+#ifdef PLATFORM_APPLE
+  if (!(window->cocoaWindow = createCocoaWindow(title, width, height)))
+    return (logError("Failed to create Cocoa window"), destroyWindow(window), NULL);
 
-  if (!SDL_Vulkan_CreateSurface(window->sdlWindowHandle, vulkanInstance, NULL, &window->surface))
-    return (logError("Failed to create window surface: %s", SDL_GetError()), destroyWindow(window), NULL);
+  VkMetalSurfaceCreateInfoEXT metalSurfaceCreationInformation = {};
+  metalSurfaceCreationInformation.sType = VK_STRUCTURE_TYPE_METAL_SURFACE_CREATE_INFO_EXT;
+  metalSurfaceCreationInformation.pLayer = getCocoaWindowMetalLayer(window->cocoaWindow);
+  metalSurfaceCreationInformation.flags = 0;
+  metalSurfaceCreationInformation.pNext = NULL;
+
+  if ((result = vkCreateMetalSurfaceEXT(vulkanInstance, &metalSurfaceCreationInformation, NULL, &window->surface)))
+    return (logError("Failed to create Cocoa window surface"), destroyWindow(window), NULL); 
+#else
+  if (!(window->sdlWindow = SDL_CreateWindow(title, (int)width, (int)height, SDL_WINDOW_VULKAN)))
+    return (logError("Failed to create SDL window: %s", SDL_GetError()), destroyWindow(window), NULL);
+
+  if (!SDL_Vulkan_CreateSurface(window->sdlWindow, vulkanInstance, NULL, &window->surface))
+    return (logError("Failed to create SDL window surface: %s", SDL_GetError()), destroyWindow(window), NULL);
+#endif
 
   uint32_t surfaceFormatCount;
   if ((result = vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, window->surface, &surfaceFormatCount, NULL)))
@@ -1176,16 +1201,19 @@ struct Window *createWindow(const struct Application *application, const char *c
       return (logError("Failed to create in flight fence #%d: %s", i, string_VkResult(result)), destroyWindow(window), NULL);
   }
 
+  if (!windowBeginFrame(window))
+    return (logError("Failed to begin initial frame"), destroyWindow(window), NULL);
+
+  window->pendingFrame = true;
   return window;
 }
 
 bool updateWindow(struct Window *const window) {
-  if (window->pendingFrame && !windowEndFrame(window)) return false;
-  window->pendingFrame = true;
+  if (!windowEndFrame(window)) return false;
 
   // Move to the next frame to get the corresponding command buffer, and synchronization objects
   window->frameIndex = (window->frameIndex + 1) % window->maximumFramesInFlight;
-  return windowBeginFrame(window);
+  return (window->pendingFrame = windowBeginFrame(window));
 }
 
 static inline bool windowBeginFrame(struct Window *const window) {
@@ -1261,6 +1289,14 @@ static inline bool windowEndFrame(const struct Window *const window) {
   return true;
 }
 
+bool windowShouldClose(struct Window *const window) {
+#ifdef PLATFORM_APPLE
+  if (cocoaWindowShouldClose(window->cocoaWindow)) return true;
+#endif
+
+  return false;
+}
+
 void drawSomething(struct Window *const window) {
   VkCommandBuffer const commandBuffer = window->commandBuffers[window->frameIndex];
 
@@ -1323,7 +1359,6 @@ void drawSomething(struct Window *const window) {
 
 void destroyWindow(struct Window *const window) {
   if (!window) return;
-
   VkResult result;
 
   struct Application const *application = window->application;
@@ -1342,7 +1377,6 @@ void destroyWindow(struct Window *const window) {
     vkDestroyFramebuffer(logicalDevice, window->framebuffers[i], NULL);
     vkDestroyBuffer(logicalDevice, window->uniformBuffers[i], NULL);
     vkFreeMemory(logicalDevice, window->uniformBuffersMemory[i], NULL);
-    free(window->uniformBuffersMapped[i]);
   }
 
   free(window->inFlightFences);
@@ -1377,8 +1411,13 @@ void destroyWindow(struct Window *const window) {
   free(window->imageViews);
   free(window->images);
   vkDestroySwapchainKHR(logicalDevice, window->swapchain, NULL);
+#ifdef PLATFORM_APPLE
+  vkDestroySurfaceKHR(vulkanInstance, window->surface, NULL);
+  destroyCocoaWindow(window->cocoaWindow);
+#else
   SDL_Vulkan_DestroySurface(vulkanInstance, window->surface, NULL);
-  SDL_DestroyWindow(window->sdlWindowHandle);
+  SDL_DestroyWindow(window->sdlWindow);
+#endif
   free(window);
 }
 

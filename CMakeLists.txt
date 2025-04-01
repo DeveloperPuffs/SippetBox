@@ -1,6 +1,10 @@
 cmake_minimum_required(VERSION 3.10)
 project(SippetBox VERSION 1.0.0)
 
+if(APPLE)
+  enable_language(OBJC)
+endif()
+
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
@@ -9,6 +13,11 @@ find_package(SDL3 REQUIRED)
 find_package(Vulkan REQUIRED)
 
 file(GLOB_RECURSE SOURCES "${CMAKE_SOURCE_DIR}/source/*.c")
+if(APPLE)
+  file(GLOB_RECURSE OBJECTIVE_C_SOURCES "${CMAKE_SOURCE_DIR}/source/*.m")
+  list(APPEND SOURCES ${OBJECTIVE_C_SOURCES})
+endif()
+
 add_executable(SippetBox ${SOURCES})
 
 target_include_directories(SippetBox PRIVATE "${CMAKE_SOURCE_DIR}/include")
@@ -16,6 +25,14 @@ target_include_directories(SippetBox PRIVATE "${CMAKE_SOURCE_DIR}/include")
 target_link_libraries(SippetBox PRIVATE PNG::PNG)
 target_link_libraries(SippetBox PRIVATE SDL3::SDL3)
 target_link_libraries(SippetBox PRIVATE Vulkan::Vulkan)
+
+if(APPLE)
+  target_link_libraries(SippetBox PRIVATE "-framework Cocoa")
+  find_library(METAL_FRAMEWORK Metal)
+  target_link_libraries(SippetBox PRIVATE ${METAL_FRAMEWORK})
+  find_library(QUARTZ_CORE_FRAMEWORK QuartzCore)
+  target_link_libraries(SippetBox PRIVATE ${QUARTZ_CORE_FRAMEWORK})
+endif()
 
 find_program(GLSLANG_VALIDATOR glslangValidator)
 if (NOT GLSLANG_VALIDATOR)

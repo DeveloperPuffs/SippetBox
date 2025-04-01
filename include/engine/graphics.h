@@ -37,6 +37,11 @@ struct Window *createWindow(const struct Application *application, const char *c
 bool updateWindow(struct Window *const window);
 
 /**
+ * Checks whether the given `Window` needs to close.
+ */
+bool windowShouldClose(struct Window *const window);
+
+/**
  * Draws something onto the window :)
  */
 void drawSomething(struct Window *const window);
