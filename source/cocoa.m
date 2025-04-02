@@ -1,7 +1,7 @@
 #import <Cocoa/Cocoa.h>
 #import <QuartzCore/CAMetalLayer.h>
-#include <engine/logging.h>
-#include <engine/cocoa.h>
+#include <sippet/core/logging.h>
+#include "cocoa.h"
 
 @interface ApplicationDelegate:NSObject <NSApplicationDelegate>
 @end

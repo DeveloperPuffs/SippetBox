@@ -1,9 +1,9 @@
-#include <engine/platform.h>
-#include <engine/logging.h>
-#include <engine/engine.h>
+#include <sippet/core/platform.h>
+#include <sippet/core/logging.h>
+#include <sippet/sippet.h>
 
 #ifdef PLATFORM_APPLE
-#include <engine/cocoa.h>
+#include "cocoa.h"
 #else
 #include <SDL3/SDL.h>
 #endif

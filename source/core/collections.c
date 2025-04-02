@@ -1,8 +1,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
-#include <engine/logging.h>
-#include <engine/collections.h>
+#include <sippet/core/logging.h>
+#include <sippet/core/collections.h>
 
 struct Array *createArray(const size_t capacity, const size_t size) {
   if (!size) return (logError("Invalid size for array"), NULL);

@@ -1,6 +1,6 @@
 #include <math.h>
 #include <string.h>
-#include <engine/math.h>
+#include <sippet/core/math.h>
 
 void cross3D(const float vector1[3], const float vector2[3], float result[3]) {
   result[0] = vector1[1] * vector2[2] - vector1[2] * vector2[1];

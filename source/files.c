@@ -3,10 +3,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <png.h>
-#include <engine/math.h>
-#include <engine/collections.h>
-#include <engine/logging.h>
-#include <engine/files.h>
+#include <sippet/core/logging.h>
+#include <sippet/core/math.h>
+#include <sippet/core/collections.h>
+#include <sippet/files.h>
 
 static inline void closeFile(const char *const type, FILE *file) {
   const int result = fclose(file);

@@ -5,15 +5,15 @@
 #include <time.h>
 #include <vulkan/vulkan.h>
 #include <vulkan/vk_enum_string_helper.h>
-#include <engine/math.h>
-#include <engine/files.h>
-#include <engine/platform.h>
-#include <engine/logging.h>
-#include <engine/graphics.h>
+#include <sippet/core/platform.h>
+#include <sippet/core/logging.h>
+#include <sippet/core/math.h>
+#include <sippet/files.h>
+#include <sippet/graphics.h>
 
 #ifdef PLATFORM_APPLE
 #include <vulkan/vulkan_metal.h>
-#include <engine/cocoa.h>
+#include "cocoa.h"
 #else
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>

@@ -1,5 +1,5 @@
-#include <engine/platform.h>
-#include <engine/logging.h>
+#include <sippet/core/platform.h>
+#include <sippet/core/logging.h>
 
 #ifdef NDEBUG
 void logError(const char *format, ...) (void)format;

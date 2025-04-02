@@ -1,10 +1,9 @@
+#include <stddef.h>
 #include <stdbool.h>
-#include <SDL3/SDL.h>
-#include <SDL3/SDL_vulkan.h>
-#include <engine/engine.h>
-#include <engine/logging.h>
-#include <engine/platform.h>
-#include <engine/graphics.h>
+#include <sippet/core/logging.h>
+#include <sippet/core/platform.h>
+#include <sippet/graphics.h>
+#include <sippet/sippet.h>
 
 struct State {
   struct Application *application;

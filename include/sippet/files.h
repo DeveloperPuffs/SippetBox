@@ -1,6 +1,6 @@
 #pragma once
 #include <stdint.h>
-#include <engine/collections.h>
+#include <sippet/core/collections.h>
 
 /**
  * Stores data about a bitmap image, captured at a specific time.
