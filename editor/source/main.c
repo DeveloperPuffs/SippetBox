@@ -6,38 +6,36 @@
 #include <sippet/sippet.h>
 
 struct State {
-  struct Application *application;
-  struct Window *window;
+  struct SippetApplication *application;
+  struct SippetWindow *window;
 };
 
 static int terminate(struct State *const state, const int exitCode);
 
 int main(void) {
-  if (!initializeEngine()) return 1;
+  if (!sippetInitialize()) return 1;
 
   struct State state = {};
   state.application = NULL;
   state.window = NULL;
 
-  if (!(state.application = createApplication("SippetBox")))
-    return (logError("Failed to create application"), terminate(&state, 1));
-  
-  logDebug("Created Application");
+  if (!(state.application = sippetCreateApplication("SippetBox")))
+    return (sippetLogError("Failed to create application"), terminate(&state, 1));
 
-  if (!(state.window = createWindow(state.application, "SippetBox", 640, 480)))
-    return (logError("Failed to create window"), terminate(&state, 1));
+  if (!(state.window = sippetCreateWindow(state.application, "SippetBox", 640, 480)))
+    return (sippetLogError("Failed to create window"), terminate(&state, 1));
 
-  while (updateEngine() && !windowShouldClose(state.window)) {
-    drawSomething(state.window);
-    updateWindow(state.window);
+  while (sippetUpdate() && !sippetWindowShouldClose(state.window)) {
+    sippetDrawSomething(state.window);
+    sippetUpdateWindow(state.window);
   }
 
   return terminate(&state, 0);
 }
 
 static int terminate(struct State *const state, const int exitCode) {
-  destroyWindow(state->window);
-  destroyApplication(state->application);
-  terminateEngine();
+  sippetDestroyWindow(state->window);
+  sippetDestroyApplication(state->application);
+  sippetTerminate();
   return exitCode;
 }

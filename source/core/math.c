@@ -2,13 +2,13 @@
 #include <string.h>
 #include <sippet/core/math.h>
 
-void cross3D(const float vector1[3], const float vector2[3], float result[3]) {
+void sippetCross3D(const float vector1[3], const float vector2[3], float result[3]) {
   result[0] = vector1[1] * vector2[2] - vector1[2] * vector2[1];
   result[1] = vector1[2] * vector2[0] - vector1[0] * vector2[2];
   result[2] = vector1[0] * vector2[1] - vector1[1] * vector2[0];
 }
 
-void normalize3D(float vector[3]) {
+void sippetNormalize3D(float vector[3]) {
   const float length = sqrtf(vector[0] * vector[0] + vector[1] * vector[1] + vector[2] * vector[2]);
   if (length > 0.0f) {
     vector[0] /= length;
@@ -20,7 +20,7 @@ void normalize3D(float vector[3]) {
 static const size_t FLOAT_SIZE = sizeof(float);
 static const size_t MATRIX_SIZE_4x4 = 16 * FLOAT_SIZE;
 
-void matrixIdentity4x4(float matrix[4][4]) {
+void sippetMatrixIdentity4x4(float matrix[4][4]) {
   memset(matrix, 0, MATRIX_SIZE_4x4);
 
   matrix[0][0] = 1.0f;
@@ -29,13 +29,13 @@ void matrixIdentity4x4(float matrix[4][4]) {
   matrix[3][3] = 1.0f;
 }
 
-void matrixRotate4x4(float matrix[4][4], float angle, const float axis[3]) {
+void sippetMatrixRotate4x4(float matrix[4][4], float angle, const float axis[3]) {
   const float x = axis[0], y = axis[1], z = axis[2];
   const float c = cosf(angle);
   const float s = sinf(angle);
   const float t = 1.0f - c;
 
-  matrixIdentity4x4(matrix);
+  sippetMatrixIdentity4x4(matrix);
 
   matrix[0][0] = t * x * x + c;
   matrix[0][1] = t * x * y - s * z;
@@ -50,7 +50,7 @@ void matrixRotate4x4(float matrix[4][4], float angle, const float axis[3]) {
   matrix[2][2] = t * z * z + c;
 }
 
-void matrixView4x4(float matrix[4][4], const float pov[3], const float center[3], const float up[3]) {
+void sippetMatrixView4x4(float matrix[4][4], const float pov[3], const float center[3], const float up[3]) {
   float f[3], s[3], u[3];
   float normalized;
 
@@ -72,7 +72,7 @@ void matrixView4x4(float matrix[4][4], const float pov[3], const float center[3]
   u[1] = s[2] * f[0] - s[0] * f[2];
   u[2] = s[0] * f[1] - s[1] * f[0];
 
-  matrixIdentity4x4(matrix);
+  sippetMatrixIdentity4x4(matrix);
 
   matrix[0][0] = s[0];
   matrix[1][0] = s[1];
@@ -91,7 +91,7 @@ void matrixView4x4(float matrix[4][4], const float pov[3], const float center[3]
   matrix[3][2] = f[0] * pov[0] + f[1] * pov[1] + f[2] * pov[2];
 }
 
-void matrixPerspective4x4(float matrix[4][4], float fov, float aspect, float near, float far) {
+void sippetMatrixPerspective4x4(float matrix[4][4], float fov, float aspect, float near, float far) {
   const float tangentHalfFov = tanf(fov / 2.0f);
   memset(matrix, 0, MATRIX_SIZE_4x4);
 
@@ -102,7 +102,7 @@ void matrixPerspective4x4(float matrix[4][4], float fov, float aspect, float nea
   matrix[3][2] = -(2.0f * far * near) / (far - near);
 }
 
-void matrixMultiply4x4(float output[4][4], float a[4][4], float b[4][4]) {
+void sippetMatrixMultiply4x4(float output[4][4], float a[4][4], float b[4][4]) {
   float result[4][4] = {};
   for (int i = 0; i < 4; ++i) {
     for (int j = 0; j < 4; ++j) {

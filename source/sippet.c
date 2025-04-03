@@ -2,29 +2,29 @@
 #include <sippet/core/logging.h>
 #include <sippet/sippet.h>
 
-#ifdef PLATFORM_APPLE
+#ifdef SIPPET_PLATFORM_APPLE
 #include "cocoa.h"
 #else
 #include <SDL3/SDL.h>
 #endif
 
-bool initializeEngine(void) {
-#ifdef PLATFORM_APPLE
-  initializeCocoa();
+bool sippetInitialize(void) {
+#ifdef SIPPET_PLATFORM_APPLE
+  sippetInitializeCocoa();
 #else
   if (!SDL_Init(SDL_INIT_VIDEO))
-    return (logError("Failed to initialize SDL: %s", SDL_GetError()), terminate(&state, 1));
+    return (sippetLogError("Failed to initialize SDL: %s", SDL_GetError()), terminate(&state, 1));
 
   if (!SDL_Vulkan_LoadLibrary(NULL))
-    return (logError("Failed to load Vulkan library: %s", SDL_GetError()), terminate(&state, 1));
+    return (sippetLogError("Failed to load Vulkan library: %s", SDL_GetError()), terminate(&state, 1));
 #endif
 
   return true;
 }
 
-bool updateEngine(void) {
-#ifdef PLATFORM_APPLE
-  updateCocoa();
+bool sippetUpdate(void) {
+#ifdef SIPPET_PLATFORM_APPLE
+  sippetUpdateCocoa();
 #else
   SDL_Event event;
   while (SDL_PollEvent(&event)) {
@@ -35,9 +35,9 @@ bool updateEngine(void) {
   return true;
 }
 
-void terminateEngine(void) {
-#ifdef PLATFORM_APPLE
-  terminateCocoa();
+void sippetTerminate(void) {
+#ifdef SIPPET_PLATFORM_APPLE
+  sippetTerminateCocoa();
 #else
   SDL_Vulkan_UnloadLibrary();
   SDL_Quit();

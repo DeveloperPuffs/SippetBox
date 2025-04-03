@@ -8,7 +8,7 @@
 
 @implementation ApplicationDelegate
 -(void)applicationDidFinishLaunching:(NSNotification *)notification {
-  logDebug("Launched Cocoa application");
+  sippetLogDebug("Launched Cocoa application");
 }
 
 -(BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication *)sender {
@@ -16,11 +16,11 @@
 }
 
 -(void)applicationWillTerminate:(NSNotification *)notification {
-  logDebug("Terminating Cocoa application");
+  sippetLogDebug("Terminating Cocoa application");
 }
 @end
 
-void initializeCocoa(void) {
+void sippetInitializeCocoa(void) {
   [NSApplication sharedApplication];
   [[NSApplication sharedApplication] setActivationPolicy:NSApplicationActivationPolicyRegular];
   [[NSApplication sharedApplication] setDelegate:[[ApplicationDelegate alloc] init]];
@@ -28,23 +28,23 @@ void initializeCocoa(void) {
   [[NSApplication sharedApplication] finishLaunching];
 }
 
-void updateCocoa(void) {
+void sippetUpdateCocoa(void) {
   NSEvent *event;
   while ((event = [[NSApplication sharedApplication] nextEventMatchingMask:NSEventMaskAny untilDate:[NSDate distantPast] inMode:NSDefaultRunLoopMode dequeue:YES]))
     [[NSApplication sharedApplication] sendEvent:event];
   [[NSApplication sharedApplication] updateWindows];
 }
 
-void terminateCocoa(void) {
+void sippetTerminateCocoa(void) {
   [[NSApplication sharedApplication] terminate:nil];
 }
 
 @interface WindowDelegate: NSObject <NSWindowDelegate>
-@property(nonatomic) struct CocoaWindow *window;
--(instancetype)initWithWindow:(struct CocoaWindow *)window;
+@property(nonatomic) struct SippetCocoaWindow *window;
+-(instancetype)initWithWindow:(struct SippetCocoaWindow *)window;
 @end
 
-struct CocoaWindow {
+struct SippetCocoaWindow {
   NSWindow *window;
   WindowDelegate *windowDelegate;
   CAMetalLayer *metalLayer;
@@ -52,7 +52,7 @@ struct CocoaWindow {
 };
 
 @implementation WindowDelegate
--(instancetype)initWithWindow:(struct CocoaWindow *)window {
+-(instancetype)initWithWindow:(struct SippetCocoaWindow *)window {
   self = [super init];
   if (!self) return nil;
   self.window = window;
@@ -65,8 +65,8 @@ struct CocoaWindow {
 }
 @end
 
-struct CocoaWindow *createCocoaWindow(const char *const title, const uint32_t width, const uint32_t height) {
-  struct CocoaWindow *const cocoaWindow = malloc(sizeof(struct CocoaWindow));
+struct SippetCocoaWindow *sippetCreateCocoaWindow(const char *const title, const uint32_t width, const uint32_t height) {
+  struct SippetCocoaWindow *const cocoaWindow = malloc(sizeof(struct SippetCocoaWindow));
   if (!cocoaWindow) return NULL;
 
   cocoaWindow->window = [
@@ -76,14 +76,14 @@ struct CocoaWindow *createCocoaWindow(const char *const title, const uint32_t wi
     defer:NO
   ];
 
-  if (!cocoaWindow->window) return (logError("Failed to create Cocoa window (NSWindow)"), destroyCocoaWindow(cocoaWindow), NULL);
+  if (!cocoaWindow->window) return (sippetLogError("Failed to create Cocoa window (NSWindow)"), sippetDestroyCocoaWindow(cocoaWindow), NULL);
 
   [cocoaWindow->window setTitle:[NSString stringWithCString:title encoding:NSUTF8StringEncoding]];
   [cocoaWindow->window makeKeyAndOrderFront:nil];
   [cocoaWindow->window center];
 
   cocoaWindow->windowDelegate = [[WindowDelegate alloc] initWithWindow:cocoaWindow];
-  if (!cocoaWindow->windowDelegate) return (logError("Failed to create Cocoa window delegate"), destroyCocoaWindow(cocoaWindow), NULL);
+  if (!cocoaWindow->windowDelegate) return (sippetLogError("Failed to create Cocoa window delegate"), sippetDestroyCocoaWindow(cocoaWindow), NULL);
 
   [cocoaWindow->window setDelegate:cocoaWindow->windowDelegate];
 
@@ -91,19 +91,19 @@ struct CocoaWindow *createCocoaWindow(const char *const title, const uint32_t wi
   cocoaWindow->window.contentView.layer = cocoaWindow->metalLayer;
   cocoaWindow->window.contentView.wantsLayer = YES;
 
-  logDebug("Created Cocoa window");
+  sippetLogDebug("Created Cocoa window");
   return cocoaWindow;
 }
 
-void *getCocoaWindowMetalLayer(const struct CocoaWindow *const cocoaWindow) {
+void *sippetGetCocoaWindowMetalLayer(const struct SippetCocoaWindow *const cocoaWindow) {
   return cocoaWindow ? cocoaWindow->metalLayer : NULL;
 }
 
-bool cocoaWindowShouldClose(const struct CocoaWindow *const cocoaWindow) {
+bool sippetCocoaWindowShouldClose(const struct SippetCocoaWindow *const cocoaWindow) {
   return !cocoaWindow || cocoaWindow->shouldClose;
 }
 
-void destroyCocoaWindow(struct CocoaWindow *const cocoaWindow) {
+void sippetDestroyCocoaWindow(struct SippetCocoaWindow *const cocoaWindow) {
   if (!cocoaWindow) return;
   if (cocoaWindow->window) {
     [cocoaWindow->window orderOut:nil];

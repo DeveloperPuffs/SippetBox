@@ -29,8 +29,8 @@ fi
 echo "Build target: $TARGET"
 
 # Check whether the clean folder should be cleaned
-if [[ "$(echo "$2" | tr '[:upper:]' '[:lower:]')" == "clean" ]]; then
-  echo "Cleaning build folder..."
+if [[ "$(echo "$3" | tr '[:upper:]' '[:lower:]')" == "clean" ]]; then
+  echo "Cleaning build folder ..."
   rm -rf build
 fi
 

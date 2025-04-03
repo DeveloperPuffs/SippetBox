@@ -5,49 +5,48 @@
 /**
  * Stores resources typically used in one application that can be used to create windows.
  */
-struct Application;
+struct SippetApplication;
 
 /**
  * Creates an instance of `Application` and initializes its resources.
  */
-struct Application *createApplication(const char *name);
+struct SippetApplication *sippetCreateApplication(const char *name);
 
 /**
  * Destroys an instance of `Application` by freeing its resources.
  */
-void destroyApplication(struct Application *const application);
+void sippetDestroyApplication(struct SippetApplication *const application);
 
 /**
  * Stores resources used by a window for creating an environment that can be renderered on.
  */
-struct Window;
+struct SippetWindow;
 
 /**
- * Creates an instance of `Window` and initializes its resources. Opens an SDL window with the
- * title as a string and the initial dimensions of the window as positive integers. Is associated
- * with the given instance of `Application`.
+ * Creates an instance of `SippetWindow` and initializes its resources. Opens an SDL window with
+ * the title as a string and the initial dimensions of the window as positive integers. Is
+ * associated with the given instance of `Application`.
  */
-struct Window *createWindow(const struct Application *application, const char *const title, const uint32_t width, const uint32_t height);
+struct SippetWindow *sippetCreateWindow(const struct SippetApplication *application, const char *const title, const uint32_t width, const uint32_t height);
 
 /**
- * Draws a frame on a `Window` by submitting the recorded rendering commands for execution, and
- * then for presenting after the rendering operations have been executed on the GPU. Returns `true`
- * for success and `false` for failure.
+ * Draws a frame on a `SippetWindow` by submitting the recorded rendering commands for execution,
+ * and then for presenting after the rendering operations have been executed on the GPU.
  */
-bool updateWindow(struct Window *const window);
+bool sippetUpdateWindow(struct SippetWindow *const window);
 
 /**
- * Checks whether the given `Window` needs to close.
+ * Checks whether the given `SippetWindow` needs to close.
  */
-bool windowShouldClose(struct Window *const window);
+bool sippetWindowShouldClose(struct SippetWindow *const window);
 
 /**
  * Draws something onto the window :)
  */
-void drawSomething(struct Window *const window);
+void sippetDrawSomething(struct SippetWindow *const window);
 
 /**
- * Destroys an instance of `Window` by freeing its resources. Closes the SDL window associated with
- * the given instance.
+ * Destroys an instance of `SippetWindow` by freeing its resources. Closes the SDL window
+ * associated with the given instance.
  */
-void destroyWindow(struct Window *const window);
+void sippetDestroyWindow(struct SippetWindow *const window);

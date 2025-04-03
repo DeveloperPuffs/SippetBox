@@ -5,7 +5,7 @@
 /**
  * Stores data about a bitmap image, captured at a specific time.
  */
-struct Image {
+struct SippetImage {
   /**
    * The width of the bitmap image in pixels.
    */
@@ -33,19 +33,19 @@ struct Image {
 };
 
 /**
- * Creates an instance of `Image` and initializes its resources.
+ * Creates an instance of `SippetImage` and initializes its resources.
  */
-struct Image *createImage(const char *const path);
+struct SippetImage *sippetCreateImage(const char *const path);
 
 /**
- * Destroys an instance of `Image` by freeing its resources.
+ * Destroys an instance of `SippetImage` by freeing its resources.
  */
-void destroyImage(struct Image *const image);
+void sippetDestroyImage(struct SippetImage *const image);
 
 /**
  * Stores data about a SPIR-V shader file.
  */
-struct Shader {
+struct SippetShader {
   /**
    * The size of the shader code in bytes.
    */
@@ -58,48 +58,48 @@ struct Shader {
 };
 
 /**
- * Creates an instance of `Shader` and initializes its resources.
+ * Creates an instance of `SippetShader` and initializes its resources.
  */
-struct Shader *createShader(const char *const path);
+struct SippetShader *sippetCreateShader(const char *const path);
 
 /**
- * Destroys an instance of `Shader` by freeing its resources.
+ * Destroys an instance of `SippetShader` by freeing its resources.
  */
-void destroyShader(struct Shader *const shader);
+void sippetDestroyShader(struct SippetShader *const shader);
 
 /**
  * Stores data about an `.obj` 3D model.
  */
-struct Object {
+struct SippetObject {
   /**
    * The positions parsed from the object as a flat array of `float`s (`x, y, z`).
    */
-  struct Array *positions;
+  struct SippetArray *positions;
 
   /**
    * The normals parsed or computed from the object as a flat array of `float`s (`i, j, k`).
    */
-  struct Array *normals;
+  struct SippetArray *normals;
 
   /**
    * The texture coordinates parsed from the object as a flat array of `float`s (`u, v, w`).
    */
-  struct Array *textureCoordinates;
+  struct SippetArray *textureCoordinates;
 
   /**
    * The indices parsed from the object as a flat array of `uint32_t`s (`positions[0],
    * positions[1], positions[2], normals[0], normals[1], textureCoordinates[0],
    * textureCoordinates[1], textureCoordinates[2]`).
    */
-  struct Array *indices;
+  struct SippetArray *indices;
 };
 
 /**
- * Creates an instance of `Object` and initializes its resources.
+ * Creates an instance of `SippetObject` and initializes its resources.
  */
-struct Object *createObject(const char *const path);
+struct SippetObject *sippetCreateObject(const char *const path);
 
 /**
- * Destroys an instance of `Object` by freeing its resources.
+ * Destroys an instance of `SippetObject` by freeing its resources.
  */
-void destroyObject(struct Object *const object);
+void sippetDestroyObject(struct SippetObject *const object);

@@ -4,62 +4,62 @@
 #include <stdint.h>
 
 /**
- * Represents a dynamic array (resizable).
+ * Represents a dynamic resizable array.
  */
-struct Array {
+struct SippetArray {
   /**
-   * The data stored in the `Array`.
+   * The data stored in the `SippetArray`.
    */
   void **data;
 
   /**
-   * The number of elements in the `void **Array::data`.
+   * The number of elements in the `void **SippetArray::data`.
    */
   size_t length;
 
   /**
-   * The maximum number of elements `void **Array::data` can hold.
+   * The maximum number of elements `void **SippetArray::data` can hold.
    */
   size_t capacity;
 
   /**
-   * The size of each element in `void **Array::data`.
+   * The size of each element in `void **SippetArray::data`.
    */
   size_t size;
 };
 
 /**
- * Allocates memory for a `Array` given its capacity and element size.
+ * Allocates memory for a `SippetArray` given its capacity and element size.
  */
-struct Array *createArray(const size_t capacity, const size_t size);
+struct SippetArray *sippetCreateArray(const size_t capacity, const size_t size);
 
 /**
- * Pushes some data into a `Array`.
+ * Pushes some data into a `SippetArray`.
  */
-bool pushArray(const void *const data, const size_t count, struct Array *const array);
+bool sippetPushArray(const void *const data, const size_t count, struct SippetArray *const array);
 
 /**
- * Frees the memory of a `Array`.
+ * Frees the memory of a `SippetArray`.
  */
-void destroyArray(struct Array *const array);
+void sippetDestroyArray(struct SippetArray *const array);
 
 /**
  * Represents an entry in the hash table, storing a key-value pair. Uses chaining (linked list) to
  * handle collisions.
  */
-struct TableEntry {
+struct SippetTableEntry {
   char *key;
   void *value;
-  struct TableEntry *next;
+  struct SippetTableEntry *next;
 };
 
 /**
- * Represents a hash table with an array of buckets (linked lists). `unsigned long Table::count`
- * keeps track of the number of stored elements, and `unsigned long Table::size` is the bucket
- * array size.
+ * Represents a hash table with an array of buckets (linked lists). `size_t SippetTable::count`
+ * keeps track of the number of stored elements, and `size_t SippetTable::size` is the bucket array
+ * size.
  */
-struct Table {
-  struct TableEntry **buckets;
+struct SippetTable {
+  struct SippetTableEntry **buckets;
   size_t count;
   size_t size;
 };
@@ -68,21 +68,20 @@ struct Table {
  * Creates and initializes a new hash table. Returns a pointer to the table or `NULL` if allocation
  * fails.
  */
-struct Table *createTable();
+struct SippetTable *sippetCreateTable();
 
 /**
  * Retrieves the value with a given key in the hash table. Returns `NULL` if the key is not found.
  */
-void *getTable(const struct Table *const table, const char *key);
+void *sippetGetTable(const struct SippetTable *const table, const char *key);
 
 /**
- * Inserts a or updates key-value pair into the hash table. Returns `1` for success and `0` for
- * failure.
+ * Inserts a or updates key-value pair into the hash table.
  */
-bool setTable(struct Table *const table, const char *key, void *value);
+bool sippetSetTable(struct SippetTable *const table, const char *key, void *value);
 
 /**
  * Frees all memory associated with the hash table, including keys, values, and entries. If a free
  * function other than `NULL` is provided, it will be used to free each stored value.
  */
-void destroyTable(struct Table *const table, void (*const freeValueFunction)(void *));
+void sippetDestroyTable(struct SippetTable *const table, void (*const freeValueFunction)(void *));

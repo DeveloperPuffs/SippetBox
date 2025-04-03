@@ -4,21 +4,21 @@
 #include <sippet/core/logging.h>
 #include <sippet/core/collections.h>
 
-struct Array *createArray(const size_t capacity, const size_t size) {
-  if (!size) return (logError("Invalid size for array"), NULL);
+struct SippetArray *sippetCreateArray(const size_t capacity, const size_t size) {
+  if (!size) return (sippetLogError("Invalid size for array"), NULL);
 
-  struct Array *const array = malloc(sizeof(struct Array));
+  struct SippetArray *const array = malloc(sizeof(struct SippetArray));
   if (!array) return NULL;
 
   array->length = 0, array->capacity = capacity, array->size = size;
   return array->capacity ? (array->data = malloc(capacity * size)) ? array : (free(array), NULL) : array;
 }
 
-bool pushArray(const void *const data, const size_t count, struct Array *const array) {
+bool sippetPushArray(const void *const data, const size_t count, struct SippetArray *const array) {
   if (!count) return 1;
 
-  if (!data) return (logError("Cannot push invalid data to array"), 0);
-  if (!array) return (logError("Cannot push data to invalid array"), 0);
+  if (!data) return (sippetLogError("Cannot push invalid data to array"), 0);
+  if (!array) return (sippetLogError("Cannot push data to invalid array"), 0);
 
   if (array->length + count > array->capacity) {
     array->capacity = 2 * (array->capacity + count);
@@ -32,7 +32,7 @@ bool pushArray(const void *const data, const size_t count, struct Array *const a
   return 1;
 }
 
-void destroyArray(struct Array *const array) {
+void sippetDestroyArray(struct SippetArray *const array) {
   if (!array) return;
   free(array->data);
   free(array);
@@ -42,11 +42,11 @@ void destroyArray(struct Array *const array) {
 #define TABLE_LOAD_FACTOR 0.7
 #define HASH_MULTIPLIER 5381
 
-struct Table *createTable() {
-  struct Table *const table = malloc(sizeof(struct Table));
+struct SippetTable *sippetCreateTable() {
+  struct SippetTable *const table = malloc(sizeof(struct SippetTable));
   if (!table) return NULL;
 
-  if (!(table->buckets = calloc(INITIAL_TABLE_SIZE, sizeof(struct TableEntry *)))) return (free(table), NULL);
+  if (!(table->buckets = calloc(INITIAL_TABLE_SIZE, sizeof(struct SippetTableEntry *)))) return (free(table), NULL);
   table->size = INITIAL_TABLE_SIZE;
   table->count = 0;
   return table;
@@ -58,9 +58,9 @@ static size_t hashFunction(const char *key, const size_t size) {
   return hash % size;
 }
 
-void *getTable(const struct Table *const table, const char *key) {
+void *sippetGetTable(const struct SippetTable *const table, const char *key) {
   const size_t index = hashFunction(key, table->size);
-  struct TableEntry *entry = table->buckets[index];
+  struct SippetTableEntry *entry = table->buckets[index];
   while (entry) {
     if (!strcmp(entry->key, key)) return entry->value;
     entry = entry->next;
@@ -69,15 +69,15 @@ void *getTable(const struct Table *const table, const char *key) {
   return NULL;
 }
 
-static bool resizeTable(struct Table *const table) {
+static bool resizeTable(struct SippetTable *const table) {
   const size_t newSize = 2 * table->size;
-  struct TableEntry **newBuckets = calloc(newSize, sizeof(struct TableEntry *));
+  struct SippetTableEntry **newBuckets = calloc(newSize, sizeof(struct SippetTableEntry *));
   if (!newBuckets) return 0;
 
   for (size_t i = 0; i < table->size; i++) {
-      struct TableEntry *entry = table->buckets[i];
+      struct SippetTableEntry *entry = table->buckets[i];
       while (entry) {
-          struct TableEntry *next = entry->next;
+          struct SippetTableEntry *next = entry->next;
 
           const size_t newIndex = hashFunction(entry->key, newSize);
           entry->next = newBuckets[newIndex];
@@ -93,17 +93,17 @@ static bool resizeTable(struct Table *const table) {
   return 1;
 }
 
-bool setTable(struct Table *const table, const char *key, void *value) {
+bool sippetSetTable(struct SippetTable *const table, const char *key, void *value) {
   if ((double)table->count / table->size > TABLE_LOAD_FACTOR && !resizeTable(table)) return 0;
 
   const size_t index = hashFunction(key, table->size);
-  struct TableEntry *entry = table->buckets[index];
+  struct SippetTableEntry *entry = table->buckets[index];
   while (entry) {
     if (!strcmp(entry->key, key)) return (entry->value = value, 1);
     entry = entry->next;
   }
 
-  struct TableEntry *const nextEntry = malloc(sizeof(struct TableEntry));
+  struct SippetTableEntry *const nextEntry = malloc(sizeof(struct SippetTableEntry));
   if (!nextEntry) return 0;
 
   if (!(nextEntry->key = strdup(key))) return (free(nextEntry), 0);
@@ -113,12 +113,12 @@ bool setTable(struct Table *const table, const char *key, void *value) {
   return (++table->count, 1);
 }
 
-void destroyTable(struct Table *const table, void (*const freeValueFunction)(void *)) {
+void sippetDestroyTable(struct SippetTable *const table, void (*const freeValueFunction)(void *)) {
   if (!table) return;
   for (size_t i = 0; i < table->size; ++i) {
-    struct TableEntry *entry = table->buckets[i];
+    struct SippetTableEntry *entry = table->buckets[i];
     while (entry) {
-      struct TableEntry *nextEntry = entry->next;
+      struct SippetTableEntry *nextEntry = entry->next;
       if (freeValueFunction) freeValueFunction(entry->value);
       free(entry->key);
       free(entry);
