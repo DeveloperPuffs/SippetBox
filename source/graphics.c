@@ -13,7 +13,7 @@
 
 #ifdef SIPPET_PLATFORM_APPLE
 #include <vulkan/vulkan_metal.h>
-#include "cocoa.h"
+#include "platform/cocoa.h"
 #else
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
