@@ -3,7 +3,7 @@
 #include <sippet/sippet.h>
 
 #ifdef SIPPET_PLATFORM_APPLE
-#include "platform/cocoa.h"
+#include "platform/apple/cocoa.h"
 #else
 #include <SDL3/SDL.h>
 #endif

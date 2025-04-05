@@ -8,12 +8,12 @@
 #include <sippet/core/platform.h>
 #include <sippet/core/message.h>
 #include <sippet/core/math.h>
-#include <sippet/files.h>
+#include <sippet/core/files.h>
 #include <sippet/graphics.h>
 
 #ifdef SIPPET_PLATFORM_APPLE
 #include <vulkan/vulkan_metal.h>
-#include "platform/cocoa.h"
+#include "platform/apple/cocoa.h"
 #else
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>

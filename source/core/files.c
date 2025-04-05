@@ -6,7 +6,7 @@
 #include <sippet/core/message.h>
 #include <sippet/core/math.h>
 #include <sippet/core/collections.h>
-#include <sippet/files.h>
+#include <sippet/core/files.h>
 
 static inline void closeFile(const char *const type, FILE *file) {
   const int result = fclose(file);
