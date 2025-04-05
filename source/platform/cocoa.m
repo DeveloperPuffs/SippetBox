@@ -1,6 +1,6 @@
 #import <Cocoa/Cocoa.h>
 #import <QuartzCore/CAMetalLayer.h>
-#include <sippet/core/logging.h>
+#include <sippet/core/message.h>
 #include "cocoa.h"
 
 @interface ApplicationDelegate:NSObject <NSApplicationDelegate>
@@ -8,7 +8,7 @@
 
 @implementation ApplicationDelegate
 -(void)applicationDidFinishLaunching:(NSNotification *)notification {
-  sippetLogDebug("Launched Cocoa application");
+  sippetSendMessage(SIPPET_MESSAGE_SEVERITY_DEBUG, "Launched Cocoa application");
 }
 
 -(BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication *)sender {
@@ -16,7 +16,7 @@
 }
 
 -(void)applicationWillTerminate:(NSNotification *)notification {
-  sippetLogDebug("Terminating Cocoa application");
+  sippetSendMessage(SIPPET_MESSAGE_SEVERITY_DEBUG, "Terminating Cocoa application");
 }
 @end
 
@@ -76,14 +76,14 @@ struct SippetCocoaWindow *sippetCreateCocoaWindow(const char *const title, const
     defer:NO
   ];
 
-  if (!cocoaWindow->window) return (sippetLogError("Failed to create Cocoa window (NSWindow)"), sippetDestroyCocoaWindow(cocoaWindow), NULL);
+  if (!cocoaWindow->window) return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to create Cocoa window (NSWindow)"), sippetDestroyCocoaWindow(cocoaWindow), NULL);
 
   [cocoaWindow->window setTitle:[NSString stringWithCString:title encoding:NSUTF8StringEncoding]];
   [cocoaWindow->window makeKeyAndOrderFront:nil];
   [cocoaWindow->window center];
 
   cocoaWindow->windowDelegate = [[WindowDelegate alloc] initWithWindow:cocoaWindow];
-  if (!cocoaWindow->windowDelegate) return (sippetLogError("Failed to create Cocoa window delegate"), sippetDestroyCocoaWindow(cocoaWindow), NULL);
+  if (!cocoaWindow->windowDelegate) return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to create Cocoa window delegate"), sippetDestroyCocoaWindow(cocoaWindow), NULL);
 
   [cocoaWindow->window setDelegate:cocoaWindow->windowDelegate];
 
@@ -91,7 +91,7 @@ struct SippetCocoaWindow *sippetCreateCocoaWindow(const char *const title, const
   cocoaWindow->window.contentView.layer = cocoaWindow->metalLayer;
   cocoaWindow->window.contentView.wantsLayer = YES;
 
-  sippetLogDebug("Created Cocoa window");
+  sippetSendMessage(SIPPET_MESSAGE_SEVERITY_DEBUG, "Created Cocoa window");
   return cocoaWindow;
 }
 

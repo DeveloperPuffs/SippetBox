@@ -3,21 +3,21 @@
 #include <stdlib.h>
 #include <string.h>
 #include <png.h>
-#include <sippet/core/logging.h>
+#include <sippet/core/message.h>
 #include <sippet/core/math.h>
 #include <sippet/core/collections.h>
 #include <sippet/files.h>
 
 static inline void closeFile(const char *const type, FILE *file) {
   const int result = fclose(file);
-  if (result) sippetLogWarning("Failed to close %s file, error code: %d", type, result);
+  if (result) sippetSendMessage(SIPPET_MESSAGE_SEVERITY_WARNING, "Failed to close %s file, error code: %d", type, result);
 }
 
 static bool sippetCreatePNGImage(FILE *file, struct SippetImage *const image);
 
 struct SippetImage *sippetCreateImage(const char *const path) {
   const char *dotPosition = strrchr(path, '.');
-  if (!dotPosition) return (sippetLogError("Failed to find image extension for: %s", path), NULL);
+  if (!dotPosition) return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to find image extension for: %s", path), NULL);
 
   const size_t extensionLength = strlen(dotPosition) + 1;
   char *const extension = (char *)malloc(extensionLength * sizeof(char));
@@ -26,27 +26,27 @@ struct SippetImage *sippetCreateImage(const char *const path) {
   strcpy(extension, dotPosition);
 
   FILE *file = fopen(path, "rb");
-  if (!file) return (sippetLogError("Failed to open image: %s", path), free(extension), NULL);
+  if (!file) return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to open image: %s", path), free(extension), NULL);
 
   struct SippetImage *const image = calloc(1, sizeof(struct SippetImage));
   if (!image) return (closeFile("image", file), free(extension), NULL);
 
   bool createdImage;
   if (!strcmp(extension, ".png")) createdImage = sippetCreatePNGImage(file, image);
-  else return (sippetLogError("Unsupported image extension '%s'", extension), closeFile("image", file), sippetDestroyImage(image), free(extension), NULL);
+  else return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Unsupported image extension '%s'", extension), closeFile("image", file), sippetDestroyImage(image), free(extension), NULL);
 
   free(extension);
   closeFile("image", file);
-  return createdImage ? image : (sippetLogError("Failed to create image with: %s", path), sippetDestroyImage(image), NULL);
+  return createdImage ? image : (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to create image with: %s", path), sippetDestroyImage(image), NULL);
 }
 
 static bool sippetCreatePNGImage(FILE *file, struct SippetImage *const image) {
   png_structp reader = png_create_read_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
-  if (!reader) return (sippetLogError("Failed to create PNG reader struct"), false);
+  if (!reader) return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to create PNG reader struct"), false);
 
   png_infop information = png_create_info_struct(reader);
-  if (!information) return (sippetLogError("Failed to query PNG reader struct information"), png_destroy_read_struct(&reader, &information, NULL), false);
-  if (setjmp(png_jmpbuf(reader))) return (sippetLogError("Failed to process PNG"), png_destroy_read_struct(&reader, &information, NULL), false);
+  if (!information) return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to query PNG reader struct information"), png_destroy_read_struct(&reader, &information, NULL), false);
+  if (setjmp(png_jmpbuf(reader))) return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to process PNG"), png_destroy_read_struct(&reader, &information, NULL), false);
 
   png_init_io(reader, file);
   png_read_info(reader, information);
@@ -84,21 +84,21 @@ void sippetDestroyImage(struct SippetImage *const image) {
 
 struct SippetShader *sippetCreateShader(const char *const path) {
   FILE *file = fopen(path, "rb");
-  if (!file) return (sippetLogError("Failed to open shader: %s", path), NULL);
+  if (!file) return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to open shader: %s", path), NULL);
 
   struct SippetShader *const shader = calloc(1, sizeof(struct SippetShader));
   if (!shader) return (closeFile("shader", file), NULL);
 
-  if (fseek(file, 0, SEEK_END)) return (sippetLogError("Failed to seek to end of shader: %s", path), closeFile("shader", file), sippetDestroyShader(shader), NULL);
+  if (fseek(file, 0, SEEK_END)) return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to seek to end of shader: %s", path), closeFile("shader", file), sippetDestroyShader(shader), NULL);
 
   const long size = ftell(file);
-  if (size == -1L) return (sippetLogError("Failed to determine shader size: %s", path), closeFile("shader", file), sippetDestroyShader(shader), NULL);
-  if (size % 4) return (sippetLogError("Shader size is not aligned: %s", path), closeFile("shader", file), sippetDestroyShader(shader), NULL);
-  if (fseek(file, 0, SEEK_SET)) return (sippetLogError("Failed to rewind shader: %s", path), closeFile("shader", file), sippetDestroyShader(shader), NULL);
+  if (size == -1L) return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to determine shader size: %s", path), closeFile("shader", file), sippetDestroyShader(shader), NULL);
+  if (size % 4) return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Shader size is not aligned: %s", path), closeFile("shader", file), sippetDestroyShader(shader), NULL);
+  if (fseek(file, 0, SEEK_SET)) return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to rewind shader: %s", path), closeFile("shader", file), sippetDestroyShader(shader), NULL);
   if (!(shader->data = malloc(shader->size = (unsigned long)size))) return (closeFile("shader", file), sippetDestroyShader(shader), NULL);
 
   if (fread(shader->data, 1, size, file) != size)
-    return (sippetLogError("Failed to read shader: %s", path), closeFile("shader", file), sippetDestroyShader(shader), NULL);
+    return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to read shader: %s", path), closeFile("shader", file), sippetDestroyShader(shader), NULL);
 
   closeFile("shader", file);
   return shader;
@@ -112,22 +112,22 @@ void sippetDestroyShader(struct SippetShader *const shader) {
 
 struct SippetObject *sippetCreateObject(const char *const path) {
   FILE *file = fopen(path, "rb");
-  if (!file) return (sippetLogError("Failed to open object: %s", path), NULL);
+  if (!file) return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to open object: %s", path), NULL);
 
   struct SippetObject *const object = calloc(1, sizeof(struct SippetObject));
   if (!object) return (closeFile("object", file), NULL);
 
   if (!(object->positions = sippetCreateArray(64, sizeof(float))))
-    return (sippetLogError("Failed to create positions array"), sippetDestroyObject(object), closeFile("object", file), NULL);
+    return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to create positions array"), sippetDestroyObject(object), closeFile("object", file), NULL);
 
   if (!(object->normals = sippetCreateArray(64, sizeof(float))))
-    return (sippetLogError("Failed to create normals array"), sippetDestroyObject(object), closeFile("object", file), NULL);
+    return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to create normals array"), sippetDestroyObject(object), closeFile("object", file), NULL);
 
   if (!(object->textureCoordinates = sippetCreateArray(64, sizeof(float))))
-    return (sippetLogError("Failed to create texture coordinates array"), sippetDestroyObject(object), closeFile("object", file), NULL);
+    return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to create texture coordinates array"), sippetDestroyObject(object), closeFile("object", file), NULL);
 
   if (!(object->indices = sippetCreateArray(64, sizeof(uint32_t))))
-    return (sippetLogError("Failed to create indices array"), sippetDestroyObject(object), closeFile("object", file), NULL);
+    return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to create indices array"), sippetDestroyObject(object), closeFile("object", file), NULL);
 
   char line[256];
   size_t lineNumber = 0;
@@ -137,10 +137,10 @@ struct SippetObject *sippetCreateObject(const char *const path) {
     if (!strncmp(line, "v ", 2)) {
       float position[3] = {0.0f, 0.0f, 0.0f};
       if (sscanf(line, "v %f %f %f", &position[0], &position[1], &position[2]) != 3)
-        return (sippetLogError("Failed to parse position (v) at line %d", lineNumber), sippetDestroyObject(object), closeFile("object", file), NULL);
+        return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to parse position (v) at line %d", lineNumber), sippetDestroyObject(object), closeFile("object", file), NULL);
 
       if (!sippetPushArray(position, 3, object->positions))
-        return (sippetLogError("Failed to push position at line %d", lineNumber), sippetDestroyObject(object), closeFile("object", file), NULL);
+        return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to push position at line %d", lineNumber), sippetDestroyObject(object), closeFile("object", file), NULL);
 
     } else if (!strncmp(line, "f ", 2)) {
       uint32_t p[3] = {1, 1, 1}, t[3] = {1, 1, 1}, n[3] = {1, 1, 1};
@@ -149,7 +149,7 @@ struct SippetObject *sippetCreateObject(const char *const path) {
       const int XN = 6 == sscanf(line, "f %u//%u %u//%u %u//%u",       &p[0], &n[0], &p[1], &n[1], &p[2], &n[2]);
       const int TN = 9 == sscanf(line, "f %u/%u/%u %u/%u/%u %u/%u/%u", &p[0], &t[0], &n[0], &p[1], &t[1], &n[1], &p[2], &t[2], &n[2]);
       if (!(XX + TX + XN + TN))
-        return (sippetLogError("Failed to parse face (f) at line %d", lineNumber), sippetDestroyObject(object), closeFile("object", file), NULL);
+        return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to parse face (f) at line %d", lineNumber), sippetDestroyObject(object), closeFile("object", file), NULL);
 
       if (!(XN + TN)) {
         // If the normal is not provided, calculate it based on the positions
@@ -173,7 +173,7 @@ struct SippetObject *sippetCreateObject(const char *const path) {
         sippetNormalize3D(normal);
 
         if (!sippetPushArray(normal, 3, object->normals))
-          return (sippetLogError("Failed to push computed normal for face at line %d", lineNumber), sippetDestroyObject(object), closeFile("object", file), NULL);
+          return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to push computed normal for face at line %d", lineNumber), sippetDestroyObject(object), closeFile("object", file), NULL);
 
         n[0] = n[1] = n[2] = object->normals->length / 3;
       }
@@ -185,44 +185,44 @@ struct SippetObject *sippetCreateObject(const char *const path) {
       };
 
       if (!sippetPushArray(indices, 9, object->indices))
-        return (sippetLogError("Failed to push indices of face at line %d", lineNumber), sippetDestroyObject(object), closeFile("object", file), NULL);
+        return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to push indices of face at line %d", lineNumber), sippetDestroyObject(object), closeFile("object", file), NULL);
 
     } else if (!strncmp(line, "vn ", 3)) {
       float normal[3] = {0.0f, 0.0f, 0.0f};
       if (sscanf(line, "vn %f %f %f", &normal[0], &normal[1], &normal[2]) != 3)
-        return (sippetLogError("Failed to parse normal (vn) at line %d", lineNumber), sippetDestroyObject(object), closeFile("object", file), NULL);
+        return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to parse normal (vn) at line %d", lineNumber), sippetDestroyObject(object), closeFile("object", file), NULL);
 
       if (!sippetPushArray(normal, 3, object->normals))
-        return (sippetLogError("Failed to push normal at line %d", lineNumber), sippetDestroyObject(object), closeFile("object", file), NULL);
+        return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to push normal at line %d", lineNumber), sippetDestroyObject(object), closeFile("object", file), NULL);
 
     } else if (!strncmp(line, "vt ", 3)) {
       float textureCoordinates[3] = {0.0f, 0.0f, 1.0f};
       const int parsedValues = sscanf(line, "vt %f %f %f", &textureCoordinates[0], &textureCoordinates[1], &textureCoordinates[2]);
       if (parsedValues != 2 && parsedValues != 3)
-        return (sippetLogError("Failed to parse texture coordinates (vt) at line %d", lineNumber), sippetDestroyObject(object), closeFile("object", file), NULL);
+        return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to parse texture coordinates (vt) at line %d", lineNumber), sippetDestroyObject(object), closeFile("object", file), NULL);
 
       if (!sippetPushArray(textureCoordinates, 3, object->textureCoordinates))
-        return (sippetLogError("Failed to push normal at line %d", lineNumber), sippetDestroyObject(object), closeFile("object", file), NULL);
+        return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to push normal at line %d", lineNumber), sippetDestroyObject(object), closeFile("object", file), NULL);
 
     } else if (!strncmp(line, "g ", 2)) {
       char groupName[128];
       if (sscanf(line, "g %s", groupName) != 1)
-        return (sippetLogError("Failed to parse group (g) at line %d", lineNumber), sippetDestroyObject(object), closeFile("object", file), NULL);
+        return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to parse group (g) at line %d", lineNumber), sippetDestroyObject(object), closeFile("object", file), NULL);
 
     } else if (!strncmp(line, "o ", 2)) {
       char objectName[128];
       if (sscanf(line, "o %s", objectName) != 1)
-        return (sippetLogError("Failed to parse object (o) at line %d", lineNumber), sippetDestroyObject(object), closeFile("object", file), NULL);
+        return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to parse object (o) at line %d", lineNumber), sippetDestroyObject(object), closeFile("object", file), NULL);
 
     } else if (!strncmp(line, "mtllib ", 7)) {
       char materialFile[128];
       if (sscanf(line, "mtllib %s", materialFile) != 1)
-        return (sippetLogError("Failed to parse material file (mtllib) at line %d", lineNumber), sippetDestroyObject(object), closeFile("object", file), NULL);
+        return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to parse material file (mtllib) at line %d", lineNumber), sippetDestroyObject(object), closeFile("object", file), NULL);
 
     } else if (!strncmp(line, "usemtl ", 7)) {
       char materialName[128];
       if (sscanf(line, "usemtl %s", materialName) != 1)
-        return (sippetLogError("Failed to parse material (usemtl) at line %d", lineNumber), sippetDestroyObject(object), closeFile("object", file), NULL);
+        return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to parse material (usemtl) at line %d", lineNumber), sippetDestroyObject(object), closeFile("object", file), NULL);
     }
   }
 

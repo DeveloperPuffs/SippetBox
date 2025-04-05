@@ -6,7 +6,7 @@
 #include <vulkan/vulkan.h>
 #include <vulkan/vk_enum_string_helper.h>
 #include <sippet/core/platform.h>
-#include <sippet/core/logging.h>
+#include <sippet/core/message.h>
 #include <sippet/core/math.h>
 #include <sippet/files.h>
 #include <sippet/graphics.h>
@@ -158,7 +158,7 @@ struct SippetApplication *sippetCreateApplication(const char *name) {
   instanceCreationInformation.enabledExtensionCount = sizeof(instanceExtensions) / sizeof(instanceExtensions[0]);
 
   if ((result = vkCreateInstance(&instanceCreationInformation, NULL, &application->vulkanInstance)))
-    return (sippetLogError("Failed to create Vulkan instance: %s", string_VkResult(result)), sippetDestroyApplication(application), NULL);
+    return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to create Vulkan instance: %s", string_VkResult(result)), sippetDestroyApplication(application), NULL);
 
   VkDebugUtilsMessengerCreateInfoEXT debugMessengerCreationInformation = {0};
   debugMessengerCreationInformation.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
@@ -175,19 +175,19 @@ struct SippetApplication *sippetCreateApplication(const char *name) {
     VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
 
   PFN_vkCreateDebugUtilsMessengerEXT createDebugMessenger = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(application->vulkanInstance, "vkCreateDebugUtilsMessengerEXT");
-  if (!createDebugMessenger) return (sippetLogError("Failed to query debug messenger creation function"), sippetDestroyApplication(application), NULL);
+  if (!createDebugMessenger) return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to query debug messenger creation function"), sippetDestroyApplication(application), NULL);
   if ((result = createDebugMessenger(application->vulkanInstance, &debugMessengerCreationInformation, NULL, &application->debugMessenger)))
-    return (sippetLogError("Failed to create debug messenger: %s", string_VkResult(result)), sippetDestroyApplication(application), NULL);
+    return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to create debug messenger: %s", string_VkResult(result)), sippetDestroyApplication(application), NULL);
 
   uint32_t physicalDeviceCount;
   if ((result = vkEnumeratePhysicalDevices(application->vulkanInstance, &physicalDeviceCount, NULL)))
-    return (sippetLogError("Failed to query physical device count: %s", string_VkResult(result)), sippetDestroyApplication(application), NULL);
-  if (!physicalDeviceCount) return (sippetLogError("No physical device found"), sippetDestroyApplication(application), NULL);
+    return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to query physical device count: %s", string_VkResult(result)), sippetDestroyApplication(application), NULL);
+  if (!physicalDeviceCount) return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "No physical device found"), sippetDestroyApplication(application), NULL);
 
   VkPhysicalDevice *const physicalDevices = malloc(physicalDeviceCount * sizeof(VkPhysicalDevice));
   if (!physicalDevices) return (sippetDestroyApplication(application), NULL);
   if ((result = vkEnumeratePhysicalDevices(application->vulkanInstance, &physicalDeviceCount, physicalDevices)))
-    return (sippetLogError("Failed to query physical devices: %s", string_VkResult(result)), sippetDestroyApplication(application), NULL);
+    return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to query physical devices: %s", string_VkResult(result)), sippetDestroyApplication(application), NULL);
 
   uint32_t bestScore = 0;
   for (uint32_t i = 0; i < physicalDeviceCount; ++i) {
@@ -203,8 +203,8 @@ struct SippetApplication *sippetCreateApplication(const char *name) {
   }
 
   free(physicalDevices);
-  if (!bestScore) return (sippetLogError("Failed to find suitable physical device"), sippetDestroyApplication(application), NULL);
-  sippetLogInformation("Selected physical device with score %d", bestScore);
+  if (!bestScore) return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to find suitable physical device"), sippetDestroyApplication(application), NULL);
+  sippetSendMessage(SIPPET_MESSAGE_SEVERITY_INFORMATION, "Selected physical device with score %d", bestScore);
 
   uint32_t queueFamilyCount = 0;
   vkGetPhysicalDeviceQueueFamilyProperties(application->physicalDevice, &queueFamilyCount, NULL);
@@ -217,7 +217,7 @@ struct SippetApplication *sippetCreateApplication(const char *name) {
 
 #ifdef SIPPET_PLATFORM_APPLE
   struct SippetCocoaWindow *const windowModel = sippetCreateCocoaWindow("", 1, 1);
-  if (!windowModel) return (sippetLogError("Failed to create window model"), free(queueFamilies), sippetDestroyApplication(application), NULL);
+  if (!windowModel) return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to create window model"), free(queueFamilies), sippetDestroyApplication(application), NULL);
 
   VkMetalSurfaceCreateInfoEXT metalSurfaceCreationInformation = {};
   metalSurfaceCreationInformation.sType = VK_STRUCTURE_TYPE_METAL_SURFACE_CREATE_INFO_EXT;
@@ -227,14 +227,14 @@ struct SippetApplication *sippetCreateApplication(const char *name) {
 
   VkSurfaceKHR surfaceModel;
   if ((result = vkCreateMetalSurfaceEXT(application->vulkanInstance, &metalSurfaceCreationInformation, NULL, &surfaceModel)))
-    return (sippetLogError("Failed to create Cocoa window surface"), free(queueFamilies), sippetDestroyCocoaWindow(windowModel), sippetDestroyApplication(application), NULL); 
+    return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to create Cocoa window surface"), free(queueFamilies), sippetDestroyCocoaWindow(windowModel), sippetDestroyApplication(application), NULL); 
 #else
   SDL_Window *const windowModel = SDL_CreateWindow("", 1, 1, SDL_WINDOW_VULKAN);
-  if (!windowModel) return (sippetLogError("Failed to create window model: %s", SDL_GetError()), free(queueFamilies), sippetDestroyApplication(application), NULL);
+  if (!windowModel) return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to create window model: %s", SDL_GetError()), free(queueFamilies), sippetDestroyApplication(application), NULL);
 
   VkSurfaceKHR surfaceModel;
   if (!SDL_Vulkan_CreateSurface(windowModel, application->vulkanInstance, NULL, &surfaceModel))
-    return (sippetLogError("Failed to create surface model: %s", SDL_GetError()), free(queueFamilies), SDL_DestroyWindow(windowModel), sippetDestroyApplication(application), NULL);
+    return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to create surface model: %s", SDL_GetError()), free(queueFamilies), SDL_DestroyWindow(windowModel), sippetDestroyApplication(application), NULL);
 #endif
 
   uint32_t graphicsQueueFamilyIndex = UINT32_MAX;
@@ -244,7 +244,7 @@ struct SippetApplication *sippetCreateApplication(const char *name) {
 
     VkBool32 supportsPresenting = VK_FALSE;
     if ((result = vkGetPhysicalDeviceSurfaceSupportKHR(application->physicalDevice, i, surfaceModel, &supportsPresenting))) {
-      sippetLogWarning("Failed to query physical device surface queue family %d presenting support verdict: %s", i, string_VkResult(result));
+      sippetSendMessage(SIPPET_MESSAGE_SEVERITY_WARNING, "Failed to query physical device surface queue family %d presenting support verdict: %s", i, string_VkResult(result));
       continue;
     }
 
@@ -262,7 +262,7 @@ struct SippetApplication *sippetCreateApplication(const char *name) {
 #endif
 
   if (graphicsQueueFamilyIndex == UINT32_MAX || presentQueueFamilyIndex == UINT32_MAX)
-    return (sippetLogError("Failed to find suitable queue family indices"), sippetDestroyApplication(application), NULL);
+    return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to find suitable queue family indices"), sippetDestroyApplication(application), NULL);
 
   VkDeviceCreateInfo deviceCreationInformation = {};
   deviceCreationInformation.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -323,7 +323,7 @@ struct SippetApplication *sippetCreateApplication(const char *name) {
   deviceCreationInformation.ppEnabledExtensionNames = logicalDeviceExtensions;
 
   if ((result = vkCreateDevice(application->physicalDevice, &deviceCreationInformation, NULL, &application->logicalDevice)))
-    return (sippetLogError("Failed to create logical device: %s", string_VkResult(result)), sippetDestroyApplication(application), NULL);
+    return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to create logical device: %s", string_VkResult(result)), sippetDestroyApplication(application), NULL);
 
   vkGetDeviceQueue(application->logicalDevice, application->graphicsQueueFamilyIndex, 0, &application->graphicsQueue);
   vkGetDeviceQueue(application->logicalDevice, application->presentQueueFamilyIndex, 0, &application->presentQueue);
@@ -338,7 +338,7 @@ void sippetDestroyApplication(struct SippetApplication *const application) {
 
   if (vulkanInstance) {
     PFN_vkDestroyDebugUtilsMessengerEXT destroyDebugMessenger = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(vulkanInstance, "vkDestroyDebugUtilsMessengerEXT");
-    if (!destroyDebugMessenger) sippetLogWarning("Failed to query debug messenger destruction function");
+    if (!destroyDebugMessenger) sippetSendMessage(SIPPET_MESSAGE_SEVERITY_WARNING, "Failed to query debug messenger destruction function");
     else destroyDebugMessenger(vulkanInstance, application->debugMessenger, NULL);
   }
 
@@ -367,10 +367,10 @@ static inline VkBool32 sippetVulkanDebugMessengerCallback(VkDebugUtilsMessageSev
     else snprintf(typeString + strlen(typeString), sizeof(typeString) - strlen(typeString), ", DEVIVE_ADDRESS_BINDING");
   }
 
-  if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) sippetLogError("%s - %s", typeString, callbackData->pMessage);
-  if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) sippetLogWarning("%s - %s", typeString, callbackData->pMessage);
-  if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT) sippetLogInformation("%s - %s", typeString, callbackData->pMessage);
-  if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT) sippetLogDebug("%s - %s", typeString, callbackData->pMessage);
+  if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Vulkan(%s): %s", typeString, callbackData->pMessage);
+  if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) sippetSendMessage(SIPPET_MESSAGE_SEVERITY_WARNING, "Vulkan(%s): %s", typeString, callbackData->pMessage);
+  if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT) sippetSendMessage(SIPPET_MESSAGE_SEVERITY_INFORMATION, "Vulkan(%s): %s", typeString, callbackData->pMessage);
+  if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT) sippetSendMessage(SIPPET_MESSAGE_SEVERITY_DEBUG, "Vulkan(%s): %s", typeString, callbackData->pMessage);
   return VK_FALSE;
 }
 
@@ -439,13 +439,13 @@ static uint32_t sippetRatePhysicalDeviceExtensions(const VkPhysicalDevice physic
 
   uint32_t extensionCount;
   if ((result = vkEnumerateDeviceExtensionProperties(physicalDevice, NULL, &extensionCount, NULL)))
-    return (sippetLogWarning("Failed to query physical device extension count: %s", string_VkResult(result)), score);
+    return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_WARNING, "Failed to query physical device extension count: %s", string_VkResult(result)), score);
 
   VkExtensionProperties *const extensions = malloc(extensionCount * sizeof(VkExtensionProperties));
   if (!extensions) return score;
 
   if ((result = vkEnumerateDeviceExtensionProperties(physicalDevice, NULL, &extensionCount, extensions)))
-    return (sippetLogWarning("Failed to query physical device extensions: %s", string_VkResult(result)), free(extensions), score);
+    return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_WARNING, "Failed to query physical device extensions: %s", string_VkResult(result)), free(extensions), score);
 
   for (uint32_t i = 0; i < extensionCount; ++i) {
     if (!strcmp(extensions[i].extensionName, VK_KHR_SWAPCHAIN_EXTENSION_NAME)) {
@@ -483,7 +483,7 @@ struct SippetWindow *sippetCreateWindow(const struct SippetApplication *applicat
 
 #ifdef SIPPET_PLATFORM_APPLE
   if (!(window->cocoaWindow = sippetCreateCocoaWindow(title, width, height)))
-    return (sippetLogError("Failed to create Cocoa window"), sippetDestroyWindow(window), NULL);
+    return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to create Cocoa window"), sippetDestroyWindow(window), NULL);
 
   VkMetalSurfaceCreateInfoEXT metalSurfaceCreationInformation = {};
   metalSurfaceCreationInformation.sType = VK_STRUCTURE_TYPE_METAL_SURFACE_CREATE_INFO_EXT;
@@ -492,24 +492,24 @@ struct SippetWindow *sippetCreateWindow(const struct SippetApplication *applicat
   metalSurfaceCreationInformation.pNext = NULL;
 
   if ((result = vkCreateMetalSurfaceEXT(vulkanInstance, &metalSurfaceCreationInformation, NULL, &window->surface)))
-    return (sippetLogError("Failed to create Cocoa window surface"), sippetDestroyWindow(window), NULL); 
+    return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to create Cocoa window surface"), sippetDestroyWindow(window), NULL); 
 #else
   if (!(window->sdlWindow = SDL_CreateWindow(title, (int)width, (int)height, SDL_WINDOW_VULKAN)))
-    return (sippetLogError("Failed to create SDL window: %s", SDL_GetError()), sippetDestroyWindow(window), NULL);
+    return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to create SDL window: %s", SDL_GetError()), sippetDestroyWindow(window), NULL);
 
   if (!SDL_Vulkan_CreateSurface(window->sdlWindow, vulkanInstance, NULL, &window->surface))
-    return (sippetLogError("Failed to create SDL window surface: %s", SDL_GetError()), sippetDestroyWindow(window), NULL);
+    return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to create SDL window surface: %s", SDL_GetError()), sippetDestroyWindow(window), NULL);
 #endif
 
   uint32_t surfaceFormatCount;
   if ((result = vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, window->surface, &surfaceFormatCount, NULL)))
-    return (sippetLogError("Failed to query surface format count: %s", string_VkResult(result)), sippetDestroyWindow(window), NULL);
-  if (!surfaceFormatCount) return (sippetLogError("No surface format found"), sippetDestroyWindow(window), NULL);
+    return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to query surface format count: %s", string_VkResult(result)), sippetDestroyWindow(window), NULL);
+  if (!surfaceFormatCount) return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "No surface format found"), sippetDestroyWindow(window), NULL);
 
   VkSurfaceFormatKHR *const surfaceFormats = malloc(surfaceFormatCount * sizeof(VkSurfaceFormatKHR));
   if (!surfaceFormats) return (sippetDestroyWindow(window), NULL);
   if ((result = vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, window->surface, &surfaceFormatCount, surfaceFormats)))
-    return (sippetLogError("Failed to query surface formats: %s", string_VkResult(result)), sippetDestroyWindow(window), free(surfaceFormats), NULL);
+    return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to query surface formats: %s", string_VkResult(result)), sippetDestroyWindow(window), free(surfaceFormats), NULL);
 
   uint32_t surfaceFormatIndex = UINT32_MAX;
   for (uint32_t i = 0; i < surfaceFormatCount; ++i) {
@@ -520,7 +520,7 @@ struct SippetWindow *sippetCreateWindow(const struct SippetApplication *applicat
     }
   }
 
-  if (surfaceFormatIndex == UINT32_MAX) return (sippetLogError("Failed to find suitable surface format"), sippetDestroyWindow(window), free(surfaceFormats), NULL);
+  if (surfaceFormatIndex == UINT32_MAX) return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to find suitable surface format"), sippetDestroyWindow(window), free(surfaceFormats), NULL);
   window->surfaceFormat = surfaceFormats[surfaceFormatIndex];
   free(surfaceFormats);
 
@@ -539,20 +539,20 @@ struct SippetWindow *sippetCreateWindow(const struct SippetApplication *applicat
 
   VkSurfaceCapabilitiesKHR surfaceCapabilities;
   if ((result = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice, window->surface, &surfaceCapabilities)))
-    return (sippetLogError("Failed to query physical device surface capabilities: %s", string_VkResult(result)), sippetDestroyWindow(window), NULL);
+    return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to query physical device surface capabilities: %s", string_VkResult(result)), sippetDestroyWindow(window), NULL);
 
   swapchainCreationInformation.minImageCount = surfaceCapabilities.minImageCount;
   swapchainCreationInformation.preTransform = surfaceCapabilities.currentTransform;
 
   if ((result = vkCreateSwapchainKHR(logicalDevice, &swapchainCreationInformation, NULL, &window->swapchain)))
-    return (sippetLogError("Failed to create swapchain: %s", string_VkResult(result)), sippetDestroyWindow(window), NULL);
+    return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to create swapchain: %s", string_VkResult(result)), sippetDestroyWindow(window), NULL);
 
   if ((result = vkGetSwapchainImagesKHR(logicalDevice, window->swapchain, &window->imageCount, NULL)))
-    return (sippetLogError("Failed to query swapchain image count: %d", string_VkResult(result)), sippetDestroyWindow(window), NULL);
-  if (!window->imageCount) return (sippetLogError("No images found in swapchain"), sippetDestroyWindow(window), NULL);
+    return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to query swapchain image count: %d", string_VkResult(result)), sippetDestroyWindow(window), NULL);
+  if (!window->imageCount) return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "No images found in swapchain"), sippetDestroyWindow(window), NULL);
   if (!(window->images = calloc(window->imageCount, sizeof(VkImage)))) return (sippetDestroyWindow(window), NULL);
   if ((result = vkGetSwapchainImagesKHR(logicalDevice, window->swapchain, &window->imageCount, window->images)))
-    return (sippetLogError("Failed to query swapchain images: %d", string_VkResult(result)), sippetDestroyWindow(window), NULL);
+    return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to query swapchain images: %d", string_VkResult(result)), sippetDestroyWindow(window), NULL);
 
   if (!(window->imageViews = calloc(window->imageCount, sizeof(VkImageView)))) return (sippetDestroyWindow(window), NULL);
   for (uint32_t i = 0; i < window->imageCount; ++i) {
@@ -572,7 +572,7 @@ struct SippetWindow *sippetCreateWindow(const struct SippetApplication *applicat
     imageViewCreationInformation.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 
     if ((result = vkCreateImageView(logicalDevice, &imageViewCreationInformation, NULL, &window->imageViews[i])))
-      return (sippetLogError("Failed to create image view %d: %s", i, string_VkResult(result)), sippetDestroyWindow(window), NULL);
+      return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to create image view %d: %s", i, string_VkResult(result)), sippetDestroyWindow(window), NULL);
   }
 
   VkAttachmentDescription colorAttachmentDescription = {};
@@ -602,7 +602,7 @@ struct SippetWindow *sippetCreateWindow(const struct SippetApplication *applicat
     }
   }
 
-  if (depthFormatIndex == SIZE_MAX) return (sippetLogError("Failed to find supported depth format"), sippetDestroyWindow(window), NULL);
+  if (depthFormatIndex == SIZE_MAX) return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to find supported depth format"), sippetDestroyWindow(window), NULL);
   const VkFormat depthFormat = depthFormats[depthFormatIndex];
 
   VkAttachmentDescription depthAttachmentDescription = {};
@@ -646,7 +646,7 @@ struct SippetWindow *sippetCreateWindow(const struct SippetApplication *applicat
   renderPassCreationInformation.pDependencies = &subpassDependency;
 
   if ((result = vkCreateRenderPass(logicalDevice, &renderPassCreationInformation, NULL, &window->renderPass)))
-    return (sippetLogError("Failed to create render pass: %s", string_VkResult(result)), sippetDestroyWindow(window), NULL);
+    return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to create render pass: %s", string_VkResult(result)), sippetDestroyWindow(window), NULL);
 
   const char *const shaderFilePaths[] = {"resources/shaders/shader.vert.spv", "resources/shaders/shader.frag.spv"};
   window->shaderModuleCount = sizeof(shaderFilePaths) / sizeof(shaderFilePaths[0]);
@@ -654,7 +654,7 @@ struct SippetWindow *sippetCreateWindow(const struct SippetApplication *applicat
   for (size_t shaderModuleIndex = 0; shaderModuleIndex < window->shaderModuleCount; ++shaderModuleIndex) {
     const char *const shaderFilePath = shaderFilePaths[shaderModuleIndex];
     struct SippetShader *const shader = sippetCreateShader(shaderFilePath);
-    if (!shader) return (sippetLogError("Failed to create shader: %s", shaderFilePath), sippetDestroyWindow(window), NULL);
+    if (!shader) return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to create shader: %s", shaderFilePath), sippetDestroyWindow(window), NULL);
 
     VkShaderModuleCreateInfo shaderModuleCreationInformation = {};
     shaderModuleCreationInformation.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
@@ -662,7 +662,7 @@ struct SippetWindow *sippetCreateWindow(const struct SippetApplication *applicat
     shaderModuleCreationInformation.pCode = shader->data;
 
     if ((result = vkCreateShaderModule(logicalDevice, &shaderModuleCreationInformation, NULL, &window->shaderModules[shaderModuleIndex])))
-      return (sippetLogError("Failed to create shader module: %s", string_VkResult(result)), sippetDestroyWindow(window), sippetDestroyShader(shader), NULL);
+      return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to create shader module: %s", string_VkResult(result)), sippetDestroyWindow(window), sippetDestroyShader(shader), NULL);
     sippetDestroyShader(shader);
   }
 
@@ -693,7 +693,7 @@ struct SippetWindow *sippetCreateWindow(const struct SippetApplication *applicat
   descriptorSetLayoutCreationInformation.bindingCount = descriptorSetLayoutBindingCount;
 
   if ((result = vkCreateDescriptorSetLayout(logicalDevice, &descriptorSetLayoutCreationInformation, NULL, &window->descriptorSetLayout)))
-    return (sippetLogError("Failed to create descriptor set layout: %s", string_VkResult(result)), sippetDestroyWindow(window), NULL);
+    return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to create descriptor set layout: %s", string_VkResult(result)), sippetDestroyWindow(window), NULL);
 
   VkPipelineLayoutCreateInfo pipelineLayoutCreationInformation = {};
   pipelineLayoutCreationInformation.sType  = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -703,7 +703,7 @@ struct SippetWindow *sippetCreateWindow(const struct SippetApplication *applicat
   pipelineLayoutCreationInformation.pushConstantRangeCount = 0;
 
   if ((result = vkCreatePipelineLayout(logicalDevice, &pipelineLayoutCreationInformation, NULL, &window->pipelineLayout)))
-    return (sippetLogError("Failed to create pipeline layout: %s", string_VkResult(result)), sippetDestroyWindow(window), NULL);
+    return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to create pipeline layout: %s", string_VkResult(result)), sippetDestroyWindow(window), NULL);
 
   VkPipelineShaderStageCreateInfo vertexShaderStageCreationInformation = {};
   vertexShaderStageCreationInformation.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -848,7 +848,7 @@ struct SippetWindow *sippetCreateWindow(const struct SippetApplication *applicat
   pipelineCreationInformation.subpass = 0;
 
   if ((result = vkCreateGraphicsPipelines(logicalDevice, VK_NULL_HANDLE, 1, &pipelineCreationInformation, NULL, &window->pipeline)))
-    return (sippetLogError("Failed to create pipeline: %s", string_VkResult(result)), sippetDestroyWindow(window), NULL);
+    return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to create pipeline: %s", string_VkResult(result)), sippetDestroyWindow(window), NULL);
 
   VkCommandPoolCreateInfo commandPoolCreationInformation = {};
   commandPoolCreationInformation.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
@@ -856,7 +856,7 @@ struct SippetWindow *sippetCreateWindow(const struct SippetApplication *applicat
   commandPoolCreationInformation.queueFamilyIndex = application->graphicsQueueFamilyIndex;
 
   if ((result = vkCreateCommandPool(logicalDevice, &commandPoolCreationInformation, NULL, &window->commandPool)))
-    return (sippetLogError("Failed to create command pool: %s", string_VkResult(result)), sippetDestroyWindow(window), NULL);
+    return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to create command pool: %s", string_VkResult(result)), sippetDestroyWindow(window), NULL);
 
   // For now, set the maximum number of frames in flight to two
   window->maximumFramesInFlight = 2;
@@ -869,7 +869,7 @@ struct SippetWindow *sippetCreateWindow(const struct SippetApplication *applicat
   commandBufferAllocationInformation.commandBufferCount = window->maximumFramesInFlight;
 
   if ((result = vkAllocateCommandBuffers(logicalDevice, &commandBufferAllocationInformation, window->commandBuffers)))
-    return (sippetLogError("Failed to create command buffers: %s", string_VkResult(result)), sippetDestroyWindow(window), NULL);
+    return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to create command buffers: %s", string_VkResult(result)), sippetDestroyWindow(window), NULL);
 
   VkImageCreateInfo depthImageCreationInformation = {};
   depthImageCreationInformation.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -887,12 +887,12 @@ struct SippetWindow *sippetCreateWindow(const struct SippetApplication *applicat
   depthImageCreationInformation.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
   if ((result = vkCreateImage(logicalDevice, &depthImageCreationInformation, NULL, &window->depthImage)))
-    return (sippetLogError("Failed to create depth image: %s", string_VkResult(result)), sippetDestroyWindow(window), NULL);
+    return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to create depth image: %s", string_VkResult(result)), sippetDestroyWindow(window), NULL);
 
   VkMemoryRequirements depthImageMemoryRequirements;
   vkGetImageMemoryRequirements(logicalDevice, window->depthImage, &depthImageMemoryRequirements);
   if (!sippetMemoryAllocate(window, depthImageMemoryRequirements, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &window->depthImageMemory))
-    return (sippetLogError("Failed to allocate memory for depth image"), sippetDestroyWindow(window), NULL);
+    return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to allocate memory for depth image"), sippetDestroyWindow(window), NULL);
 
   VkImageViewCreateInfo depthImageViewCreationInformation = {};
   depthImageViewCreationInformation.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -906,11 +906,11 @@ struct SippetWindow *sippetCreateWindow(const struct SippetApplication *applicat
   depthImageViewCreationInformation.subresourceRange.layerCount = 1;
 
   if ((result = vkCreateImageView(logicalDevice, &depthImageViewCreationInformation, NULL, &window->depthImageView)))
-    return (sippetLogError("Failed to create depth image view: %s", string_VkResult(result)), sippetDestroyWindow(window), NULL);
+    return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to create depth image view: %s", string_VkResult(result)), sippetDestroyWindow(window), NULL);
 
   const char *const imageFilePath = "resources/models/pirate_ship/Textures/colormap.png";
   if (!sippetTextureLoad(window, imageFilePath, &window->textureImage, &window->textureImageMemory))
-    return (sippetLogError("Failed to load texture image"), sippetDestroyWindow(window), NULL);
+    return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to load texture image"), sippetDestroyWindow(window), NULL);
 
   VkImageViewCreateInfo imageViewCreationInformation = {};
   imageViewCreationInformation.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -924,7 +924,7 @@ struct SippetWindow *sippetCreateWindow(const struct SippetApplication *applicat
   imageViewCreationInformation.subresourceRange.layerCount = 1;
 
   if ((result = vkCreateImageView(logicalDevice, &imageViewCreationInformation, NULL, &window->textureImageView)))
-    return (sippetLogError("Failed to create texture image view: %s", string_VkResult(result)), sippetDestroyWindow(window), NULL);
+    return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to create texture image view: %s", string_VkResult(result)), sippetDestroyWindow(window), NULL);
 
   VkSamplerCreateInfo samplerCreationInformation = {};
   samplerCreationInformation.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
@@ -945,10 +945,10 @@ struct SippetWindow *sippetCreateWindow(const struct SippetApplication *applicat
   samplerCreationInformation.maxLod = 0.0f;
 
   if ((result = vkCreateSampler(logicalDevice, &samplerCreationInformation, NULL, &window->textureSampler)))
-    return (sippetLogError("Failed to create texture sampler: %s", string_VkResult(result)), sippetDestroyWindow(window), NULL);
+    return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to create texture sampler: %s", string_VkResult(result)), sippetDestroyWindow(window), NULL);
 
   struct SippetObject *const object = sippetCreateObject("resources/models/pirate_ship/ship-pirate-large.obj");
-  if (!object) return (sippetLogError("Failed to create object"), sippetDestroyWindow(window), NULL);
+  if (!object) return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to create object"), sippetDestroyWindow(window), NULL);
 
   // For now, this is the same as the index count because I will implement vertex deduplication later
   window->indexCount = object->indices->length / 3;
@@ -960,11 +960,11 @@ struct SippetWindow *sippetCreateWindow(const struct SippetApplication *applicat
   const VkBufferUsageFlagBits vertexStagingBufferUsages = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
   const VkMemoryPropertyFlags vertexStagingBufferMemoryProperties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
   if (!sippetBufferCreate(window, vertexBufferSize, vertexStagingBufferUsages, vertexStagingBufferMemoryProperties, &vertexStagingBuffer, &vertexStagingBufferMemory))
-    return (sippetLogError("Failed to create vertex staging buffer"), sippetDestroyWindow(window), sippetDestroyObject(object), NULL);
+    return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to create vertex staging buffer"), sippetDestroyWindow(window), sippetDestroyObject(object), NULL);
 
   void *vertexStagingBufferData;
   if ((result = vkMapMemory(logicalDevice, vertexStagingBufferMemory, 0, vertexBufferSize, 0, &vertexStagingBufferData))) {
-    sippetLogError("Failed to map staging buffer memory: %s", string_VkResult(result));
+    sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to map staging buffer memory: %s", string_VkResult(result));
     vkDestroyBuffer(logicalDevice, vertexStagingBuffer, NULL);
     vkFreeMemory(logicalDevice, vertexStagingBufferMemory, NULL);
     sippetDestroyWindow(window);
@@ -977,7 +977,7 @@ struct SippetWindow *sippetCreateWindow(const struct SippetApplication *applicat
   const VkBufferUsageFlagBits indexStagingBufferUsages = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
   const VkMemoryPropertyFlags indexStagingBufferMemoryProperties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
   if (!sippetBufferCreate(window, indexBufferSize, indexStagingBufferUsages, indexStagingBufferMemoryProperties, &indexStagingBuffer, &indexStagingBufferMemory)) {
-    sippetLogError("Failed to create index staging buffer");
+    sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to create index staging buffer");
     vkDestroyBuffer(logicalDevice, vertexStagingBuffer, NULL);
     vkFreeMemory(logicalDevice, vertexStagingBufferMemory, NULL);
     sippetDestroyWindow(window);
@@ -987,7 +987,7 @@ struct SippetWindow *sippetCreateWindow(const struct SippetApplication *applicat
 
   void *indexStagingBufferData;
   if ((result = vkMapMemory(logicalDevice, indexStagingBufferMemory, 0, indexBufferSize, 0, &indexStagingBufferData))) {
-    sippetLogError("Failed to map staging buffer memory: %s", string_VkResult(result));
+    sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to map staging buffer memory: %s", string_VkResult(result));
     vkDestroyBuffer(logicalDevice, vertexStagingBuffer, NULL);
     vkFreeMemory(logicalDevice, vertexStagingBufferMemory, NULL);
     vkDestroyBuffer(logicalDevice, indexStagingBuffer, NULL);
@@ -1034,7 +1034,7 @@ struct SippetWindow *sippetCreateWindow(const struct SippetApplication *applicat
   const VkBufferUsageFlagBits vertexBufferUsages = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
   const VkMemoryPropertyFlags vertexBufferMemoryProperties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
   if (!sippetBufferCreate(window, vertexBufferSize, vertexBufferUsages, vertexBufferMemoryProperties, &window->vertexBuffer, &window->vertexBufferMemory)) {
-    sippetLogError("Failed to create vertex buffer");
+    sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to create vertex buffer");
     vkDestroyBuffer(logicalDevice, vertexStagingBuffer, NULL);
     vkFreeMemory(logicalDevice, vertexStagingBufferMemory, NULL);
     vkDestroyBuffer(logicalDevice, indexStagingBuffer, NULL);
@@ -1044,7 +1044,7 @@ struct SippetWindow *sippetCreateWindow(const struct SippetApplication *applicat
   }
 
   if (!sippetBufferCopy(window, vertexStagingBuffer, window->vertexBuffer, vertexBufferSize)) {
-    sippetLogError("Failed to copy staging buffer onto vertex buffer");
+    sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to copy staging buffer onto vertex buffer");
     vkDestroyBuffer(logicalDevice, vertexStagingBuffer, NULL);
     vkFreeMemory(logicalDevice, vertexStagingBufferMemory, NULL);
     vkDestroyBuffer(logicalDevice, indexStagingBuffer, NULL);
@@ -1059,7 +1059,7 @@ struct SippetWindow *sippetCreateWindow(const struct SippetApplication *applicat
   const VkBufferUsageFlagBits indexBufferUsages = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
   const VkMemoryPropertyFlags indexBufferMemoryProperties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
   if (!sippetBufferCreate(window, indexBufferSize, indexBufferUsages, indexBufferMemoryProperties, &window->indexBuffer, &window->indexBufferMemory)) {
-    sippetLogError("Failed to create index buffer");
+    sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to create index buffer");
     vkDestroyBuffer(logicalDevice, indexStagingBuffer, NULL);
     vkFreeMemory(logicalDevice, indexStagingBufferMemory, NULL);
     sippetDestroyWindow(window);
@@ -1067,7 +1067,7 @@ struct SippetWindow *sippetCreateWindow(const struct SippetApplication *applicat
   }
 
   if (!sippetBufferCopy(window, indexStagingBuffer, window->indexBuffer, indexBufferSize)) {
-    sippetLogError("Failed to copy staging buffer onto index buffer");
+    sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to copy staging buffer onto index buffer");
     vkDestroyBuffer(logicalDevice, indexStagingBuffer, NULL);
     vkFreeMemory(logicalDevice, indexStagingBufferMemory, NULL);
     sippetDestroyWindow(window);
@@ -1088,9 +1088,9 @@ struct SippetWindow *sippetCreateWindow(const struct SippetApplication *applicat
     const VkBufferUsageFlagBits uniformBufferUsages = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
     const VkMemoryPropertyFlags uniformBufferMemoryProperties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
     if (!sippetBufferCreate(window, uniformBufferSize, uniformBufferUsages, uniformBufferMemoryProperties, &window->uniformBuffers[i], &window->uniformBuffersMemory[i]))
-      return (sippetLogError("Failed to create uniform buffer #%d", i), sippetDestroyWindow(window), NULL);
+      return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to create uniform buffer #%d", i), sippetDestroyWindow(window), NULL);
     if ((result = vkMapMemory(logicalDevice, window->uniformBuffersMemory[i], 0, uniformBufferSize, 0, &window->uniformBuffersMapped[i])))
-      return (sippetLogError("Failed to map memory for uniform buffer #%d: %s", i, string_VkResult(result)), sippetDestroyWindow(window), NULL);
+      return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to map memory for uniform buffer #%d: %s", i, string_VkResult(result)), sippetDestroyWindow(window), NULL);
   }
 
   VkDescriptorPoolSize descriptorPoolSizes[2];
@@ -1106,7 +1106,7 @@ struct SippetWindow *sippetCreateWindow(const struct SippetApplication *applicat
   descriptorPoolCreationInformation.poolSizeCount = 2;
 
   if ((result = vkCreateDescriptorPool(logicalDevice, &descriptorPoolCreationInformation, NULL, &window->descriptorPool)))
-    return (sippetLogError("Failed to create descrioptor pool: %s", string_VkResult(result)), sippetDestroyWindow(window), NULL);
+    return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to create descrioptor pool: %s", string_VkResult(result)), sippetDestroyWindow(window), NULL);
 
   VkDescriptorSetAllocateInfo descriptorSetAllocationInformation = {};
   descriptorSetAllocationInformation.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
@@ -1124,7 +1124,7 @@ struct SippetWindow *sippetCreateWindow(const struct SippetApplication *applicat
 
   if (!(window->descriptorSets = calloc(window->maximumFramesInFlight, sizeof(VkDescriptorSet)))) return (sippetDestroyWindow(window), NULL);
   if ((result = vkAllocateDescriptorSets(logicalDevice, &descriptorSetAllocationInformation, window->descriptorSets)))
-    return (sippetLogError("Failed to allocate descriptor sets: %s", string_VkResult(result)) ,sippetDestroyWindow(window), NULL);
+    return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to allocate descriptor sets: %s", string_VkResult(result)) ,sippetDestroyWindow(window), NULL);
 
   for (uint32_t i = 0; i < window->maximumFramesInFlight; ++i) {
     VkDescriptorBufferInfo descriptorBufferInformation = {};
@@ -1176,7 +1176,7 @@ struct SippetWindow *sippetCreateWindow(const struct SippetApplication *applicat
     framebufferCreationInformation.layers = 1;
 
     if ((result = vkCreateFramebuffer(logicalDevice, &framebufferCreationInformation, NULL, &window->framebuffers[i])))
-      return (sippetLogError("Failed to create framebuffer %d: %s", i, string_VkResult(result)), sippetDestroyWindow(window), NULL);
+      return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to create framebuffer %d: %s", i, string_VkResult(result)), sippetDestroyWindow(window), NULL);
   }
 
   if (!(window->imageAvailableSemaphores = calloc(window->maximumFramesInFlight, sizeof(VkSemaphore)))) return (sippetDestroyWindow(window), NULL);
@@ -1192,15 +1192,15 @@ struct SippetWindow *sippetCreateWindow(const struct SippetApplication *applicat
 
   for (uint32_t i = 0; i < window->maximumFramesInFlight; ++i) {
     if ((result = vkCreateSemaphore(logicalDevice, &semaphoreCreationInformation, NULL, &window->imageAvailableSemaphores[i])))
-      return (sippetLogError("Failed to create image available semaphore #%d: %s", i, string_VkResult(result)), sippetDestroyWindow(window), NULL);
+      return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to create image available semaphore #%d: %s", i, string_VkResult(result)), sippetDestroyWindow(window), NULL);
     if ((result = vkCreateSemaphore(logicalDevice, &semaphoreCreationInformation, NULL, &window->renderFinishedSemaphores[i])))
-      return (sippetLogError("Failed to create render finished semaphore #%d: %s", i, string_VkResult(result)), sippetDestroyWindow(window), NULL);
+      return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to create render finished semaphore #%d: %s", i, string_VkResult(result)), sippetDestroyWindow(window), NULL);
     if ((result = vkCreateFence(logicalDevice, &fenceCreationInformation, NULL, &window->inFlightFences[i])))
-      return (sippetLogError("Failed to create in flight fence #%d: %s", i, string_VkResult(result)), sippetDestroyWindow(window), NULL);
+      return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to create in flight fence #%d: %s", i, string_VkResult(result)), sippetDestroyWindow(window), NULL);
   }
 
   if (!sippetWindowBeginFrame(window))
-    return (sippetLogError("Failed to begin initial frame"), sippetDestroyWindow(window), NULL);
+    return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to begin initial frame"), sippetDestroyWindow(window), NULL);
 
   window->pendingFrame = true;
   return window;
@@ -1224,22 +1224,22 @@ static inline bool sippetWindowBeginFrame(struct SippetWindow *const window) {
   VkFence const inFlightFence = window->inFlightFences[window->frameIndex];
 
   if ((result = vkWaitForFences(logicalDevice, 1, &inFlightFence, VK_TRUE, UINT64_MAX)))
-    return (sippetLogError("Failed to wait for in flight fence #%d: %s", window->frameIndex, string_VkResult(result)), false);
+    return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to wait for in flight fence #%d: %s", window->frameIndex, string_VkResult(result)), false);
 
   if ((result = vkResetFences(logicalDevice, 1, &inFlightFence)))
-    return (sippetLogError("Failed to reset in flight fence #%d: %s", window->frameIndex, string_VkResult(result)), false);
+    return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to reset in flight fence #%d: %s", window->frameIndex, string_VkResult(result)), false);
 
   if ((result = vkAcquireNextImageKHR(logicalDevice, window->swapchain, UINT64_MAX, imageAvailableSemaphore, VK_NULL_HANDLE, &window->imageIndex)))
-    return (sippetLogError("Failed to acquire next swapchain image: %s", string_VkResult(result)), false);
+    return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to acquire next swapchain image: %s", string_VkResult(result)), false);
 
   if ((result = vkResetCommandBuffer(commandBuffer, 0)))
-    return (sippetLogError("Failed to reset command buffer #%d: %s", window->frameIndex, string_VkResult(result)), false);
+    return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to reset command buffer #%d: %s", window->frameIndex, string_VkResult(result)), false);
 
   VkCommandBufferBeginInfo commandBufferBeginningInformation = {};
   commandBufferBeginningInformation.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 
   if ((result = vkBeginCommandBuffer(commandBuffer, &commandBufferBeginningInformation)))
-    return (sippetLogError("Failed to begin command buffer #%d: %s", window->frameIndex, string_VkResult(result)), 0);
+    return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to begin command buffer #%d: %s", window->frameIndex, string_VkResult(result)), 0);
 
   return 1;
 }
@@ -1255,7 +1255,7 @@ static inline bool sippetWindowEndFrame(const struct SippetWindow *const window)
   VkFence const inFlightFence = window->inFlightFences[window->frameIndex];
 
   if ((result = vkEndCommandBuffer(commandBuffer)))
-    return (sippetLogError("Failed to end command buffer #%d: %s", window->frameIndex, string_VkResult(result)), false);
+    return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to end command buffer #%d: %s", window->frameIndex, string_VkResult(result)), false);
 
   VkSubmitInfo submissionInformation = {};
   submissionInformation.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -1270,7 +1270,7 @@ static inline bool sippetWindowEndFrame(const struct SippetWindow *const window)
   submissionInformation.pWaitDstStageMask = waitStages;
 
   if ((result = vkQueueSubmit(application->graphicsQueue, 1, &submissionInformation, inFlightFence)))
-    return (sippetLogError("Failed to submit command buffer #%d: %s", window->frameIndex, string_VkResult(result)), false);
+    return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to submit command buffer #%d: %s", window->frameIndex, string_VkResult(result)), false);
 
   VkPresentInfoKHR presentationInformation = {};
   presentationInformation.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
@@ -1282,7 +1282,7 @@ static inline bool sippetWindowEndFrame(const struct SippetWindow *const window)
   presentationInformation.pResults = NULL;
 
   if ((result = vkQueuePresentKHR(application->presentQueue, &presentationInformation)))
-    return (sippetLogError("Failed to present image: %s", window->frameIndex, string_VkResult(result)), false);
+    return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to present image: %s", window->frameIndex, string_VkResult(result)), false);
 
   return true;
 }
@@ -1365,7 +1365,7 @@ void sippetDestroyWindow(struct SippetWindow *const window) {
   VkCommandBuffer *commandBuffers = window->commandBuffers;
 
   if (window->pendingFrame && (result = vkEndCommandBuffer(commandBuffers[window->frameIndex])))
-    sippetLogWarning("Failed to end last command buffer #%d: %s", window->frameIndex, string_VkResult(result));
+    sippetSendMessage(SIPPET_MESSAGE_SEVERITY_WARNING, "Failed to end last command buffer #%d: %s", window->frameIndex, string_VkResult(result));
 
   vkDeviceWaitIdle(logicalDevice);
   for (uint32_t i = 0; i < window->maximumFramesInFlight; ++i) {
@@ -1438,10 +1438,10 @@ static inline bool sippetMemoryAllocate(const struct SippetWindow *const window,
   }
 
   if (memoryAllocationInformation.memoryTypeIndex == UINT32_MAX)
-    return (sippetLogError("Failed to find suitable physical device memory type for memory allocation"), false);
+    return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to find suitable physical device memory type for memory allocation"), false);
 
   if ((result = vkAllocateMemory(window->application->logicalDevice, &memoryAllocationInformation, NULL, memory)))
-    return (sippetLogError("Failed to allocate memory: %s", string_VkResult(result)), false);
+    return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to allocate memory: %s", string_VkResult(result)), false);
 
   return true;
 }
@@ -1456,14 +1456,14 @@ static inline bool sippetCommandStart(const struct SippetWindow *const window, V
   commandBufferAllocationInformation.commandBufferCount = 1;
 
   if ((result = vkAllocateCommandBuffers(window->application->logicalDevice, &commandBufferAllocationInformation, commandBuffer)))
-    return (sippetLogError("Failed to allocate single time command buffer: %s", string_VkResult(result)), false);
+    return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to allocate single time command buffer: %s", string_VkResult(result)), false);
 
   VkCommandBufferBeginInfo commandBufferBeginningInformation = {};
   commandBufferBeginningInformation.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
   commandBufferBeginningInformation.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
   if ((result = vkBeginCommandBuffer(*commandBuffer, &commandBufferBeginningInformation))) {
-    sippetLogError("Failed to begin single time command buffer: %s", string_VkResult(result));
+    sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to begin single time command buffer: %s", string_VkResult(result));
     vkFreeCommandBuffers(window->application->logicalDevice, window->commandPool, 1, commandBuffer);
     return false;
   }
@@ -1475,7 +1475,7 @@ static inline bool sippetCommandFinish(const struct SippetWindow *const window, 
   VkResult result;
 
   if ((result = vkEndCommandBuffer(commandBuffer))) {
-    sippetLogError("Failed to end single time command buffer: %s", string_VkResult(result));
+    sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to end single time command buffer: %s", string_VkResult(result));
     vkFreeCommandBuffers(window->application->logicalDevice, window->commandPool, 1, &commandBuffer);
     return false;
   }
@@ -1486,13 +1486,13 @@ static inline bool sippetCommandFinish(const struct SippetWindow *const window, 
   submissionInformation.pCommandBuffers = &commandBuffer;
 
   if ((result = vkQueueSubmit(window->application->graphicsQueue, 1, &submissionInformation, VK_NULL_HANDLE))) {
-    sippetLogError("Failed to submit single time command buffer to graphics queue: %s", string_VkResult(result));
+    sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to submit single time command buffer to graphics queue: %s", string_VkResult(result));
     vkFreeCommandBuffers(window->application->logicalDevice, window->commandPool, 1, &commandBuffer);
     return false;
   }
 
   if ((result = vkQueueWaitIdle(window->application->graphicsQueue))) {
-    sippetLogError("Failed to wait for graphics queue: %s", string_VkResult(result));
+    sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to wait for graphics queue: %s", string_VkResult(result));
     vkFreeCommandBuffers(window->application->logicalDevice, window->commandPool, 1, &commandBuffer);
     return false;
   }
@@ -1511,18 +1511,18 @@ static inline bool sippetBufferCreate(const struct SippetWindow *const window, c
   bufferCreationInformation.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
   if ((result = vkCreateBuffer(window->application->logicalDevice, &bufferCreationInformation, NULL, buffer)))
-    return (sippetLogError("Failed to create buffer: %s", string_VkResult(result)), false);
+    return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to create buffer: %s", string_VkResult(result)), false);
 
   VkMemoryRequirements memoryRequirements;
   vkGetBufferMemoryRequirements(window->application->logicalDevice, *buffer, &memoryRequirements);
   if (!sippetMemoryAllocate(window, memoryRequirements, memoryProperties, memory)) {
-    sippetLogError("Failed to allocate memory for buffer: %s", string_VkResult(result));
+    sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to allocate memory for buffer: %s", string_VkResult(result));
     vkDestroyBuffer(window->application->logicalDevice, *buffer, NULL);
     return false;
   }
 
   if ((result = vkBindBufferMemory(window->application->logicalDevice, *buffer, *memory, 0))) {
-    sippetLogError("Failed to bind buffer memory: %s", string_VkResult(result));
+    sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to bind buffer memory: %s", string_VkResult(result));
     vkDestroyBuffer(window->application->logicalDevice, *buffer, NULL);
     vkFreeMemory(window->application->logicalDevice, *memory, NULL);
     return false;
@@ -1533,13 +1533,13 @@ static inline bool sippetBufferCreate(const struct SippetWindow *const window, c
 
 static inline bool sippetBufferCopy(const struct SippetWindow *const window, VkBuffer source, VkBuffer destination, const VkDeviceSize size) {
   VkCommandBuffer commandBuffer;
-  if (!sippetCommandStart(window, &commandBuffer)) return (sippetLogError("Failed to start single time command buffer"), false);
+  if (!sippetCommandStart(window, &commandBuffer)) return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to start single time command buffer"), false);
 
   VkBufferCopy bufferCopyRegion = {};
   bufferCopyRegion.size = size;
   vkCmdCopyBuffer(commandBuffer, source, destination, 1, &bufferCopyRegion);
 
-  if (!sippetCommandFinish(window, commandBuffer)) return (sippetLogError("Failed to finish single time command buffer"), false);
+  if (!sippetCommandFinish(window, commandBuffer)) return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to finish single time command buffer"), false);
   return true;
 }
 
@@ -1549,7 +1549,7 @@ static inline bool sippetTextureLoad(const struct SippetWindow *const window, co
   VkResult result;
 
   struct SippetImage *const image = sippetCreateImage(path);
-  if (!image) return (sippetLogError("Failed to create image"), false);
+  if (!image) return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to create image"), false);
 
   const VkDeviceSize imageSize = 4 * image->width * image->height;
 
@@ -1558,11 +1558,11 @@ static inline bool sippetTextureLoad(const struct SippetWindow *const window, co
   const VkBufferUsageFlagBits stagingBufferUsages = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
   const VkMemoryPropertyFlags stagingBufferMemoryProperties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
   if (!sippetBufferCreate(window, imageSize, stagingBufferUsages, stagingBufferMemoryProperties, &stagingBuffer, &stagingBufferMemory))
-    return (sippetLogError("Failed to create staging buffer for image"), sippetDestroyImage(image), 0);
+    return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to create staging buffer for image"), sippetDestroyImage(image), 0);
 
   void *stagingBufferData;
   if ((result = vkMapMemory(window->application->logicalDevice, stagingBufferMemory, 0, imageSize, 0, &stagingBufferData))) {
-    sippetLogError("Failed to map staging buffer memory: %s", string_VkResult(result));
+    sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to map staging buffer memory: %s", string_VkResult(result));
     vkDestroyBuffer(window->application->logicalDevice, stagingBuffer, NULL);
     sippetDestroyImage(image);
     return 0;
@@ -1588,7 +1588,7 @@ static inline bool sippetTextureLoad(const struct SippetWindow *const window, co
   imageCreationInformation.flags = 0;
 
   if ((result = vkCreateImage(window->application->logicalDevice, &imageCreationInformation, NULL, texture))) {
-    sippetLogError("Failed to create texture: %s", string_VkResult(result));
+    sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to create texture: %s", string_VkResult(result));
     vkDestroyBuffer(window->application->logicalDevice, stagingBuffer, NULL);
     vkFreeMemory(window->application->logicalDevice, stagingBufferMemory, NULL);
     sippetDestroyImage(image);
@@ -1599,7 +1599,7 @@ static inline bool sippetTextureLoad(const struct SippetWindow *const window, co
   vkGetImageMemoryRequirements(window->application->logicalDevice, *texture, &imageMemoryRequirements);
 
   if (!sippetMemoryAllocate(window, imageMemoryRequirements, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, memory)) {
-    sippetLogError("Failed to allocate memory for image");
+    sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to allocate memory for image");
     vkDestroyBuffer(window->application->logicalDevice, stagingBuffer, NULL);
     vkFreeMemory(window->application->logicalDevice, stagingBufferMemory, NULL);
     sippetDestroyImage(image);
@@ -1607,7 +1607,7 @@ static inline bool sippetTextureLoad(const struct SippetWindow *const window, co
   }
 
   if ((result = vkBindImageMemory(window->application->logicalDevice, *texture, *memory, 0))) {
-    sippetLogError("Failed to bind image memory: %s", string_VkResult(result));
+    sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to bind image memory: %s", string_VkResult(result));
     vkDestroyBuffer(window->application->logicalDevice, stagingBuffer, NULL);
     vkFreeMemory(window->application->logicalDevice, stagingBufferMemory, NULL);
     sippetDestroyImage(image);
@@ -1615,7 +1615,7 @@ static inline bool sippetTextureLoad(const struct SippetWindow *const window, co
   }
 
   if (!sippetImageLayoutTransition(window, *texture, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)) {
-    sippetLogError("Failed to transition image layout");
+    sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to transition image layout");
     vkDestroyBuffer(window->application->logicalDevice, stagingBuffer, NULL);
     vkFreeMemory(window->application->logicalDevice, stagingBufferMemory, NULL);
     sippetDestroyImage(image);
@@ -1623,7 +1623,7 @@ static inline bool sippetTextureLoad(const struct SippetWindow *const window, co
   }
 
   if (!sippetCopyBufferToImage(window, stagingBuffer, *texture, (uint32_t)image->width, (uint32_t)image->height)) {
-    sippetLogError("Failed to copy buffer to image");
+    sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to copy buffer to image");
     vkDestroyBuffer(window->application->logicalDevice, stagingBuffer, NULL);
     vkFreeMemory(window->application->logicalDevice, stagingBufferMemory, NULL);
     sippetDestroyImage(image);
@@ -1631,7 +1631,7 @@ static inline bool sippetTextureLoad(const struct SippetWindow *const window, co
   }
 
   if (!sippetImageLayoutTransition(window, *texture, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)) {
-    sippetLogError("Failed to transition image layout");
+    sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to transition image layout");
     vkDestroyBuffer(window->application->logicalDevice, stagingBuffer, NULL);
     vkFreeMemory(window->application->logicalDevice, stagingBufferMemory, NULL);
     sippetDestroyImage(image);
@@ -1646,7 +1646,7 @@ static inline bool sippetTextureLoad(const struct SippetWindow *const window, co
 
 static inline bool sippetImageLayoutTransition(const struct SippetWindow *const window, VkImage image, const VkFormat format, const VkImageLayout previousLayout, const VkImageLayout nextLayout) {
   VkCommandBuffer commandBuffer;
-  if (!sippetCommandStart(window, &commandBuffer)) return (sippetLogError("Failed to start single time command buffer"), false);
+  if (!sippetCommandStart(window, &commandBuffer)) return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to start single time command buffer"), false);
 
   VkImageMemoryBarrier imageMemoryBarrier = {};
   imageMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -1674,16 +1674,16 @@ static inline bool sippetImageLayoutTransition(const struct SippetWindow *const 
     imageMemoryBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
     sourceStages = VK_PIPELINE_STAGE_TRANSFER_BIT;
     destinationStages = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-  } else return (sippetLogError("Unsupported image layout transition from '%s' to '%s'", string_VkImageLayout(previousLayout), string_VkImageLayout(nextLayout)), sippetCommandFinish(window, commandBuffer), false);
+  } else return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Unsupported image layout transition from '%s' to '%s'", string_VkImageLayout(previousLayout), string_VkImageLayout(nextLayout)), sippetCommandFinish(window, commandBuffer), false);
 
   vkCmdPipelineBarrier(commandBuffer, sourceStages, destinationStages, 0, 0, NULL, 0, NULL, 1, &imageMemoryBarrier);
-  if (!sippetCommandFinish(window, commandBuffer)) return (sippetLogError("Failed to finish single time command buffer"), false);
+  if (!sippetCommandFinish(window, commandBuffer)) return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to finish single time command buffer"), false);
   return true;
 }
 
 static inline bool sippetCopyBufferToImage(const struct SippetWindow *const window, VkBuffer buffer, VkImage image, const uint32_t width, const uint32_t height) {
   VkCommandBuffer commandBuffer;
-  if (!sippetCommandStart(window, &commandBuffer)) return (sippetLogError("Failed to start single time command buffer"), false);
+  if (!sippetCommandStart(window, &commandBuffer)) return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to start single time command buffer"), false);
 
   VkBufferImageCopy bufferImageCopyRegion = {};
   bufferImageCopyRegion.bufferOffset = 0;
@@ -1701,6 +1701,6 @@ static inline bool sippetCopyBufferToImage(const struct SippetWindow *const wind
   bufferImageCopyRegion.imageExtent.depth = 1;
 
   vkCmdCopyBufferToImage(commandBuffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &bufferImageCopyRegion);
-  if (!sippetCommandFinish(window, commandBuffer)) return (sippetLogError("Failed to finish single time command buffer"), false);
+  if (!sippetCommandFinish(window, commandBuffer)) return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to finish single time command buffer"), false);
   return true;
 }

@@ -1,5 +1,5 @@
 #include <sippet/core/platform.h>
-#include <sippet/core/logging.h>
+#include <sippet/core/message.h>
 #include <sippet/sippet.h>
 
 #ifdef SIPPET_PLATFORM_APPLE
@@ -13,10 +13,10 @@ bool sippetInitialize(void) {
   sippetInitializeCocoa();
 #else
   if (!SDL_Init(SDL_INIT_VIDEO))
-    return (sippetLogError("Failed to initialize SDL: %s", SDL_GetError()), terminate(&state, 1));
+    return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to initialize SDL: %s", SDL_GetError()), terminate(&state, 1));
 
   if (!SDL_Vulkan_LoadLibrary(NULL))
-    return (sippetLogError("Failed to load Vulkan library: %s", SDL_GetError()), terminate(&state, 1));
+    return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Failed to load Vulkan library: %s", SDL_GetError()), terminate(&state, 1));
 #endif
 
   return true;

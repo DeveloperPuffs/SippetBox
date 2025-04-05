@@ -1,11 +1,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
-#include <sippet/core/logging.h>
+#include <sippet/core/message.h>
 #include <sippet/core/collections.h>
 
 struct SippetArray *sippetCreateArray(const size_t capacity, const size_t size) {
-  if (!size) return (sippetLogError("Invalid size for array"), NULL);
+  if (!size) return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Invalid size for array"), NULL);
 
   struct SippetArray *const array = malloc(sizeof(struct SippetArray));
   if (!array) return NULL;
@@ -17,8 +17,8 @@ struct SippetArray *sippetCreateArray(const size_t capacity, const size_t size) 
 bool sippetPushArray(const void *const data, const size_t count, struct SippetArray *const array) {
   if (!count) return 1;
 
-  if (!data) return (sippetLogError("Cannot push invalid data to array"), 0);
-  if (!array) return (sippetLogError("Cannot push data to invalid array"), 0);
+  if (!data) return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Cannot push invalid data to array"), 0);
+  if (!array) return (sippetSendMessage(SIPPET_MESSAGE_SEVERITY_ERROR, "Cannot push data to invalid array"), 0);
 
   if (array->length + count > array->capacity) {
     array->capacity = 2 * (array->capacity + count);
