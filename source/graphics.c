@@ -2,10 +2,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
-#include <time.h>
 #include <vulkan/vulkan.h>
 #include <vulkan/vk_enum_string_helper.h>
 #include <sippet/core/platform.h>
+#include <sippet/core/time.h>
 #include <sippet/core/message.h>
 #include <sippet/core/math.h>
 #include <sippet/core/files.h>
@@ -1320,10 +1320,7 @@ void sippetDrawSomething(struct SippetWindow *const window) {
   vkCmdBeginRenderPass(commandBuffer, &renderPassBeginningInformation, VK_SUBPASS_CONTENTS_INLINE);
 
   const float radians = acos(-1.0) / 180.0f;
-
-  struct timespec time;
-  clock_gettime(CLOCK_MONOTONIC, &time);
-  const float currentTime = time.tv_sec + time.tv_nsec / 1e9;
+  const float currentTime = sippetGetCurrentTime();
 
   const float rotationAxis[3] = {0.0f, 1.0f, 0.0f};
   sippetMatrixRotate4x4(window->uniformBufferObject.model, currentTime * radians * 90.0f, rotationAxis);

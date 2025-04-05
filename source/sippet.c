@@ -4,12 +4,14 @@
 
 #ifdef SIPPET_PLATFORM_APPLE
 #include "platform/apple/cocoa.h"
+#include "platform/apple/time.h"
 #else
 #include <SDL3/SDL.h>
 #endif
 
 bool sippetInitialize(void) {
 #ifdef SIPPET_PLATFORM_APPLE
+  sippetAppleInitializeTime();
   sippetInitializeCocoa();
 #else
   if (!SDL_Init(SDL_INIT_VIDEO))
